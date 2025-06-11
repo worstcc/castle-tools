@@ -14,7 +14,7 @@
 - Uses "ccDeobsfucate.txt" as input (contains ActionScript hex data), then overwrites the file with deobsfucated hex data
 
 ### bsp directory
-- Contains info & SWFs to help create custom BSP files
+- Contains files to assist in creating custom BSP files (info in "bspGuide.txt")
 
 # Usage examples
 - On Windows, use `py .\SCRIPT.py` to run a python script

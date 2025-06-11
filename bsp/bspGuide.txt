@@ -1,0 +1,113 @@
+- Castle Crashers BSP guide (by worst) -
+
+The BSP system in CC stores the data for the collision lines and waypoints (wave objects).
+Using it offers much better game performance and ease of use when making collision, compared to the old custom collision system.
+It also provides an efficient wave system that I recommend to use, but it is not required.
+
+BSP creation steps (requires JPEXS/flash (level creation), ruffle (BSP creation), python, blowfish (script)):
+1. In your level, place down the line/waypoint objects in frame 2 of the level's game object (included "bspObjects.swf" file contains these objects)
+    - JPEXS tips:
+        - The BSP creation will not work correctly if multiple objects have the same name
+        - Naming the waypoint objects is recommended (easier to keep track) but not required
+2. Open "bsp.swf" in JPEXS
+3. In tag list view, copy the "game" PlaceObject with dependencies to bsp.swf (place before "BSP" FrameLabel)
+    - If another level's tags are already present, remove all tags in frame 1 that are before the FrameLabel, then paste
+4. Save bsp.swf
+5. Run the "ccCrypt.py" script with the "--bsp" parameter
+    - "ccCrypt.py --bsp $BSPNAME $OUTDIR"
+6. Use the opened ruffle window to see if the BSP was created properly (arrow keys to move, shift to move faster)
+7. Close the ruffle window to create the BSP PAK file
+8. Move the PAK file into the game's BSP folder (CastleCrashers/data/bsps)
+    - Using "ccCompile.py" script to move it is recommended
+9. In your level's code, load the BSP using the "f_BSPLoadLevel" function
+    - The game will crash when loading a BSP file that isn't in the game
+
+A video showing the process is included if these steps are unclear.
+
+- Collision -
+
+CC's collision is composed of infinitely thin lines. For collision checks, the game checks if your next position will cross a BSP line, if true, then a collision is detected.
+For efficient collision detection (game performance), the line data is managed with BSP (binary space partitioning).
+There are many line types to control the collision behavior (sliding off collision or not, slopes, unique ground types like stairs and water)
+
+Line types:
+- plain (1)
+    - no unique behavior on collide
+- slide (2)
+    - player moves vertically along the line on collide
+- slope (3)
+    - player moves vertically based on the line's slope when above the line
+- ledge (4)
+    - on collide, finds another ledge line above or below the player position, then changes the player's position based on the second ledge line
+- ledge slide (5)
+    - same as ledge, but with pseudo slide line behavior (only move player along when close above line vertically)
+- ledge slope (6)
+    - same as ledge, but with slope line behavior
+    - unused in vanilla game
+- stairs (100)
+    - ground type: move player vertically and move player body Y based on the line's slope
+- stairs entry (101)
+    - same as stairs, but not checked for when moving player
+- deathbox (200)
+    - ground type: damage player in a buggy way
+    - unused in vanilla game
+- water (300)
+    - ground type: player moves slower on the ground, makes water FX
+- exit (400)
+    - ground type: changes level based on the level portals
+- function (700)
+    - call the function assigned to root variable "fp_FunctionLine" on the player ("fp_FunctionLineProjectile" for projectiles)
+    - allow player through if function returns true
+- table (1000)
+    - ground type: change body Y of player to appear higher up
+    - behaves like plain collision when player is on/near the ground
+
+Placement tips:
+- The position of a collision line is based on the center of the line object, with the center left & right being the endpoint positions
+- When creating the BSP with the flash file, it automatically removes gaps in the collision by matching line endpoints to each other (line tightening)
+- Having a line that has endpoints which aren't close to any other line will by default usually cause problems when creating the BSP due to the line tightening
+- The "getLineCoords.py" script can be used to precisely place collision lines down in JPEXS
+    - Usage: getLineCoords.py $X1 $Y1 $X2 $Y2
+    - It will output the position, width (in pixels), and angle (in degrees). The values need to be applied in order for the line to be transformed properly
+
+- Waypoints -
+
+The waypoints are initialized from left to right, with the IDs starting at zero.
+To use waypoints in a level, code is needed in the level's "f_Main" function to check if a waypoint has passed the center of the screen after updating the camera.
+The waypoint check is designed for when the screen is scrolling right, so making it work for left scrolling requires extra steps (details are in LEVELBSP.as file).
+The waypoint code is included in the LEVELBSP files.
+
+Waypoint functions for levels:
+- f_GetWPX(id)
+- f_GetWPY(id)
+- f_GetWPHit(id)
+- f_SetWPHit(id)
+
+Important placement tip: an extra waypoint before the first waypoint and after the last waypoint is required for the waypoint check to work correctly.
+
+- The bspMainFunctions.as file -
+
+This file contains edited main functions which:
+- Fixes incorrect groundtype bug (stairs noclip, water on land)
+- Adds slope toggle via "_root.c_disableSlopes" variable (as enemies are not smart at navigating on slopes)
+- Adds support for enemies navigating ledge/table collision on their own, and makes those collision types not buggy to fight enemies on
+- Adds HiFps function calls when navigating ledges/tables
+
+These are optional improvements, but I recommend implementing them if you plan to add ledges/tables in your levels.
+The incorrect groundtype bugfix should always be implemented to prevent out of bounds bugs (change the one instance of "0.0001" to "0.001" in f_PlainMCH)
+
+- changelog -
+
+v4:
+- Rework creation steps entirely (flash no longer required)
+
+v3:
+- Main functions: fixed shadows becoming invisible if player/enemy dies while on a table
+- Set active_players variable in bsp.fla
+- Removed alternate line tightening mode, as multiple endpoint matching caused out of bounds bugs
+
+v2:
+- Simplified creation steps (bspInput file is no longer necessary)
+
+v1:
+- Initial release

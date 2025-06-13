@@ -252,9 +252,8 @@ def decryptPDAGNREC(infile: Path, outdir: Optional[Path]):
 def decryptPDAGBREC(infile: Path, outdir: Optional[Path]):
     print("decrypting " + infile.name + " (BREC)")
     name, input_data = unzipFile(infile)
-    pdagBytes = decryptSWFBREC(input_data)
     raw_name = name.split(".")[0]
-    write_file(pdagBytes, outdir / (raw_name + ".pdag"))
+    write_file(input_data, outdir / (raw_name + ".pdag"))
 
 def encryptBREC(infile: Path, outdir: Optional[Path] = None):
     print("encrypting " + infile.name + (" (BREC)"))

@@ -4,16 +4,20 @@ import os
 import glob
 import subprocess
 import argparse
+import sys
 from pathlib import Path
 
 def movePak(file, dir):
     filename = os.path.basename(file)
     if "level" in filename:
-        os.rename(file, os.path.join(dir, "levels", filename))
+        dest = os.path.join(dir, "levels", filename)
     elif "bsp" in filename:
-        os.rename(file, os.path.join(dir, "bsps", filename))
+        dest = os.path.join(dir, "bsps", filename)
     else:
-        os.rename(file, os.path.join(dir, "game", filename))
+        dest = os.path.join(dir, "game", filename)
+    if os.path.exists(dest):
+        os.remove(dest)
+    os.rename(file, dest)
     print(filename)
 
 if __name__ == "__main__":
@@ -45,9 +49,9 @@ if __name__ == "__main__":
     swfFiles = sorted(glob.glob("*.swf"), key=os.path.getsize)
     for file in swfFiles:
         if args.brec:
-            subprocess.run([Path(__file__).parent / "ccCrypt.py", "--brec", "--encrypt", file, "."])
+            subprocess.run([sys.executable, str(Path(__file__).parent / "ccCrypt.py"), "--brec", "--encrypt", file, "."])
         else:
-            subprocess.run([Path(__file__).parent / "ccCrypt.py", "--encrypt", file, "."])
+            subprocess.run([sys.executable, str(Path(__file__).parent / "ccCrypt.py"), "--encrypt", file, "."])
 
         pakFile = os.path.splitext(file)[0].lower() + ".pak"
         movePak(pakFile, gamedir)

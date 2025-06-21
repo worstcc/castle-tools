@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 
 import re
+from pathlib import Path
 
 # open file
-with open('ccDeobsfucate.txt', 'r+') as f:
+with open(Path(__file__).parent / "ccDeobsfucate.txt", 'r+') as f:
     # read file
     contents = f.read()
 

@@ -62,3 +62,8 @@ ccCompile.py $INDIR $GAMEDIR
 ```
 ccCompile.py --brec $INDIR $GAMEDIR
 ```
+
+### Precisely place down a BSP line in JPEXS using matrix copy & paste
+```
+bsp/getLineCoords.py $X1 $Y1 $X2 $Y2
+```

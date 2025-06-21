@@ -68,7 +68,8 @@ Placement tips:
 - Having a line that has endpoints which aren't close to any other line will by default usually cause problems when creating the BSP due to the line tightening
 - The "getLineCoords.py" script can be used to precisely place collision lines down in JPEXS
     - Usage: getLineCoords.py $X1 $Y1 $X2 $Y2
-    - It will output the position, width (in pixels), and angle (in degrees). The values need to be applied in order for the line to be transformed properly
+    - It will output the transform matrix of the line which can be copied into JPEXS (transform line -> Paste matrix from clipboard)
+    - The line object needs to have an unedited transform for the matrix pasting to work properly (except in latest nightly versions of JPEXS)
 
 - Waypoints -
 

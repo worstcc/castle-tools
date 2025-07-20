@@ -1,12 +1,11 @@
 function f_Init(zone) {
-    _root.loader.game.game.container = true;
-    var i = undefined;
-    var temp = undefined;
-    var n_state = zone.n_state;
-    switch(n_state) {
+    game.game.container = true;
+    var i;
+    var temp;
+    switch(zone.n_state) {
         case 0:
-            p_game = _root.loader.game.game;
-            _root.p_game = _root.loader.game.game;
+            p_game = game.game;
+            _root.p_game = game.game;
             console_version = false;
             if(!console_version) {
                 p_game.gotoAndStop(2);
@@ -53,7 +52,7 @@ function f_Init(zone) {
             break;
         case 5:
             _root.f_ResetCamera(zone);
-            _root.f_SetMainfp(_root.loader.f_Main);
+            _root.f_SetMainfp(f_Main);
             _root.f_ActivatePlayers();
             _root.fader.f_FadeIn();
             _root.f_HudWaitEnd();

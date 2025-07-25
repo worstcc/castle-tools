@@ -4,25 +4,17 @@ The BSP system in CC stores the data for the collision lines and waypoints (wave
 Using it offers much better game performance and ease of use when making collision, compared to the old custom collision system.
 It also provides an efficient wave system that I recommend to use, but it is not required.
 
-BSP creation steps (requires JPEXS/flash (level creation), ruffle (BSP creation), python, blowfish (script)):
+To create a BSP file:
 1. In your level, place down the line/waypoint objects in frame 2 of the level's game object (included "bspObjects.swf" file contains these objects)
     - JPEXS tips:
         - The BSP creation will not work correctly if multiple objects have the same name
-        - Naming the waypoint objects is recommended (easier to keep track) but not required
-2. Open "bsp.swf" in JPEXS
-3. In tag list view, copy the "game" PlaceObject with dependencies to bsp.swf (place before "BSP" FrameLabel)
-    - If another level's tags are already present, remove all tags in frame 1 that are before the FrameLabel, then paste
-4. Save bsp.swf
-5. Run the "ccCrypt.py" script with the "--bsp" parameter
-    - "ccCrypt.py --bsp $BSPNAME $OUTDIR"
-6. Use the opened ruffle window to see if the BSP was created properly (arrow keys to move, shift to move faster)
-7. Close the ruffle window to create the BSP PAK file
-8. Move the PAK file into the game's BSP folder (CastleCrashers/data/bsps)
-    - Using "ccCompile.py" script to move it is recommended
-9. In your level's code, load the BSP using the "f_BSPLoadLevel" function
+        - Naming the waypoint objects is recommended (easier to keep track) but not required (IDs start at 0)
+2. Run "crypt.rb" script (example: "./crypt.rb --bsp --bspname $BSPNAME $SWFFILE $OUTDIR")
+3. Use the opened ruffle window to see if the BSP was created properly (arrow keys to move, shift to move faster)
+4. Close the ruffle window to create the PAK file
+5. Move the PAK file into the game's BSP folder (CastleCrashers/data/bsps)
+6. In your level's code, load the BSP using the "f_BSPLoadLevel" function, using the name specified in step 2
     - The game will crash when loading a BSP file that isn't in the game
-
-A video showing the process is included if these steps are unclear.
 
 - Collision -
 
@@ -66,8 +58,8 @@ Placement tips:
 - The position of a collision line is based on the center of the line object, with the center left & right being the endpoint positions
 - When creating the BSP with the flash file, it automatically removes gaps in the collision by matching line endpoints to each other (line tightening)
 - Having a line that has endpoints which aren't close to any other line will by default usually cause problems when creating the BSP due to the line tightening
-- The "getLineCoords.py" script can be used to precisely place collision lines down in JPEXS
-    - Usage: getLineCoords.py $X1 $Y1 $X2 $Y2
+- The "getLineCoords.rb" script can be used to precisely place collision lines down in JPEXS
+    - Usage: getLineCoords.rb $X1 $Y1 $X2 $Y2
     - It will output the transform matrix of the line which can be copied into JPEXS (transform line -> Paste matrix from clipboard)
     - The line object needs to have an unedited transform for the matrix pasting to work properly (except in latest nightly versions of JPEXS)
 

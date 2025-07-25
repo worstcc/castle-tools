@@ -1,12 +1,11 @@
 function f_Init(zone) {
-    _root.loader.game.game.container = true;
-    var i = undefined;
-    var temp = undefined;
-    var n_state = zone.n_state;
-    switch(n_state) {
+    game.game.container = true;
+    var i;
+    var temp;
+    switch(zone.n_state) {
         case 0:
-            p_game = _root.loader.game.game;
-            _root.p_game = _root.loader.game.game;
+            p_game = game.game;
+            _root.p_game = game.game;
             console_version = false;
             if(!console_version) {
                 p_game.gotoAndStop(2);
@@ -62,44 +61,43 @@ function f_Init(zone) {
         case 5:
             StopMusic();
             _root.f_ResetCamera(zone);
-            _root.f_SetMainfp(_root.loader.f_Main);
+            _root.f_SetMainfp(f_Main);
             _root.f_ActivatePlayers();
             _root.f_HudWaitEnd();
             _root.fader.f_FadeIn();
-
             i = 1;
             while(i <= 4) {
-                temp = p_game["p" + int(i)];
+                temp = p_game["p" + i];
                 if(temp.alive) {
                     _root.f_WalkToInit(temp,p_game["p" + i + "_1"]._x,p_game["p" + i + "_1"]._y,temp.fp_StandAnim,true);
                 }
                 i++;
             }
     }
-    zone.n_state = int(zone.n_state + 1);
+    zone.n_state++;
 }
 function f_Main(zone) {
-    var temp = undefined;
+    var temp;
     _root.f_UpdateCamera(zone);
     // waypoints
-    var newwaypoint = _root.main.newwaypoint;
-    if(_root.main.waypoint != newwaypoint) {
+    var wp = zone.newwaypoint;
+    if(zone.waypoint != wp) {
         // optional code block to add support for waypoints that are only triggered when moving left
         // to use, add extra condition "zone.wp_dir == -1" after the "f_GetWPHit" condition in the waypoint's hit check
         /*
-        if(_root.main.newwaypoint > _root.main.waypoint) {
+        if(wp > zone.waypoint) {
             zone.wp_dir = 1;
         } else {
             zone.wp_dir = -1;
-            newwaypoint++;
+            wp++;
         }
         */
-        switch(newwaypoint) {
+        switch(wp) {
             case 1:
-                if(!_root.f_GetWPHit(1)) {
-                    _root.f_SetWPHit(1);
+                if(!f_GetWPHit(1)) {
+                    f_SetWPHit(1);
                     _root.f_SetLeash(_root.main.right + 50,0,_root.main.left - 125,0);
-                    temp = _root.f_SpawnBarbarian(_root.f_GetWPX(1) - 200,_root.f_GetWPY(1));
+                    temp = _root.f_SpawnBarbarian(f_GetWPX(1) - 200,f_GetWPY(1));
                     if(temp) {
                         temp.health_max = 1;
                         temp.health = temp.health_max;
@@ -110,8 +108,8 @@ function f_Main(zone) {
                     _root.fp_SpecialEvent = f_WP1_Clear;
                 }
         }
-        _root.main.lastwaypoint = _root.main.waypoint;
-        _root.main.waypoint = _root.main.newwaypoint;
+        zone.lastwaypoint = zone.waypoint;
+        zone.waypoint = zone.newwaypoint;
     }
 }
 function f_LoadLevelClips() {
@@ -123,7 +121,7 @@ function f_LoadLevelClips() {
 function f_SetPortals() {
     var i = 1;
     while(i < 10) {
-        _root["portal" + int(i)].open = false;
+        _root["portal" + i].open = false;
         i++;
     }
     _root.num_portals = 2;

@@ -1,19 +1,22 @@
 # castle-tools
 
-### ccCrypt.py
+### Requirements:
+- ruby (`winget install RubyInstallerTeam.Ruby.3.4`)
+- rubyzip & nokogiri gems (after installing Ruby: `gem install rubyzip nokogiri`)
+- JPEXS (latest nightly recommended) (https://github.com/jindrapetrik/jpexs-decompiler/releases) 
+- ruffle (https://ruffle.rs/downloads)
+
+### crypt.rb
 - Decrypts PAK files to SWF/encrypts SWF files to PAK
 - Supports both NREC (steam version) & BREC (XBLA/PS3 version) PAK files
 - Fixes SWF file length when decrypting (fixes missing frames/assets in JPEXS)
 - Can create BSP PAK files
-- Requires blowfish (`pip install blowfish`)
-- Requires ruffle for BSP creation (https://ruffle.rs/downloads)
-- Original NREC decryption/encryption script by ethteck (https://github.com/ethteck/castlecrashers)
+- Based on original NREC decryption/encryption script by ethteck (https://github.com/ethteck/castlecrashers)
 
-### ccDeobsfucate.py
-- Deobsfucates AS2 (ActionScript 2.0) code (fixes §§ instructions & unknown 70s)
-- Uses "ccDeobsfucate.txt" as input (contains AS2 hex data), then overwrites the file with deobsfucated hex data
+### deobfuscateSWF.rb
+- Deobfuscates all AS2 (ActionScript 2.0) code in a SWF file (fixes §§ instructions & unknown 70s)
 
-### ccCompile.py
+### compile.rb
 - Encrypts all SWF files in an input directory then moves the created PAK files to a output (game) directory
 - Useful for quickly applying changes made to SWF files into the game
 
@@ -24,46 +27,43 @@
 - Contains SWF & AS files for a blank level template
 
 # Usage examples
-- On Windows, use `py .\SCRIPT.py` to run a python script
-  - If `py` or `pip` doesn't work, uninstall Python, then reinstall using winget (`winget install Python.Python.3.9`)
-- On Linux, use `./SCRIPT.py`
 
 ### Decrypt PAK file (NREC/BREC)
 ```
-ccCrypt.py $PAKFILE $OUTDIR
+./crypt.rb $PAKFILE $OUTDIR
 ```
 
 ### Encrypt SWF file to NREC PAK
 ```
-ccCrypt.py --encrypt $SWFFILE $OUTDIR 
+./crypt.rb --encrypt $SWFFILE $OUTDIR 
+```
+
+### Create BSP PAK file using a level SWF as input
+```
+./crypt.rb --bsp --bspname $BSPNAME $SWFFILE $OUTDIR
 ```
 
 ### Encrypt SWF file to BREC PAK
 ```
-ccCrypt.py --brec --encrypt $SWFFILE $OUTDIR
-```
-
-### Create BSP PAK file
-```
-ccCrypt.py --bsp $BSPNAME $OUTDIR
-```
-
-### Deobsfucate AS2 hex data in "ccDeobsfucate.txt"
-```
-ccDeobsfucate.py
+./crypt.rb --brec --encrypt $SWFFILE $OUTDIR
 ```
 
 ### Encrypt SWF files in a directory then move the PAK files to a game data directory
 ```
-ccCompile.py $INDIR $GAMEDIR
+./compile.rb $INDIR $GAMEDIR
 ```
 
 ### Encrypt SWF files in a directory then move the PAK files to a game data directory (BREC)
 ```
-ccCompile.py --brec $INDIR $GAMEDIR
+./compile.rb --brec $INDIR $GAMEDIR
+```
+
+### Deobfuscate AS2 hex data in a SWF file
+```
+./deobfuscateSWF.py $SWFFILE
 ```
 
 ### Precisely place down a BSP line in JPEXS using matrix copy & paste
 ```
-bsp/getLineCoords.py $X1 $Y1 $X2 $Y2
+./bsp/getLineCoords.rb $X1 $Y1 $X2 $Y2
 ```

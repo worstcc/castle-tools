@@ -60,7 +60,7 @@
 
 ### Deobfuscate AS2 in a SWF file
 ```
-./deobfuscateSWF.py $SWFFILE
+./deobfuscateSWF.rb $SWFFILE
 ```
 
 ### Precisely place down a BSP line in JPEXS using matrix copy & paste

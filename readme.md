@@ -58,7 +58,7 @@
 ./compile.rb --brec $INDIR $GAMEDIR
 ```
 
-### Deobfuscate AS2 hex data in a SWF file
+### Deobfuscate AS2 in a SWF file
 ```
 ./deobfuscateSWF.py $SWFFILE
 ```

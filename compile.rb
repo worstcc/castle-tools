@@ -49,7 +49,7 @@ if File.file?(indir)
   swfFiles = [File.basename(indir)]
 elsif File.directory?(indir)
   workingDir = indir
-  swfFiles = Dir.glob("*.swf").sort_by { |f| File.size(f) }
+  swfFiles = Dir.glob(File.join(workingDir,"*.swf")).sort_by { |f| File.size(f) }
 else
   raise "indir is not a valid directory"
 end

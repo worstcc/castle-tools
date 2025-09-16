@@ -145,7 +145,7 @@ def decryptNREC(inFile,outDir)
   # remove "CD" bytes and everything after
   pattern = [0x40,0x00,0x00,0x00,0xCD].pack('C*').force_encoding('ASCII-8BIT')
   newSWFData.force_encoding('ASCII-8BIT')
-  cdIndex = newSWFData.index(pattern)
+  cdIndex = newSWFData.rindex(pattern)
   if cdIndex
     newSWFData = newSWFData[0,cdIndex + 4]
   end
@@ -200,7 +200,7 @@ def decryptBREC(inFile,outDir)
   # remove "CD" bytes and everything after
   pattern = [0x40,0x00,0x00,0x00,0xCD].pack('C*').force_encoding('ASCII-8BIT')
   newSWFData.force_encoding('ASCII-8BIT')
-  cdIndex = newSWFData.index(pattern)
+  cdIndex = newSWFData.rindex(pattern)
   if cdIndex
     newSWFData = newSWFData[0,cdIndex + 4]
   end
@@ -441,7 +441,7 @@ if options[:bsp]
   end
   bspName = bspName.downcase
   createBSP(inFile,outDir,bspName,options[:brec])
-  exit 1
+  exit 0
 elsif options[:encrypt]
   if inFile.end_with?(".pdag")
     options[:brec] ? encryptPDAGBREC(inFile,outDir) : encryptPDAGNREC(inFile,outDir)

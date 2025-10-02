@@ -99,7 +99,7 @@ end
 def validateChecksum(data)
   ck1 = data[-4,4].unpack1('V')
   ck2 = calcChecksum(data[0...-4] + "\x00\x00\x00\x00")
-  raise "checksum mismatch: %08X != %08X" % [ck1,chk2] if ck1 != ck2
+  raise "checksum mismatch: %08X != %08X" % [ck1,ck2] if ck1 != ck2
 end
 
 def buildHeaderNREC(data)

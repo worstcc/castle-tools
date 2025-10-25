@@ -2,7 +2,7 @@
 
 ### Requirements:
 - ruby (`winget install RubyInstallerTeam.Ruby.3.4`)
-- rubyzip & nokogiri gems (after installing Ruby: `gem install rubyzip nokogiri`)
+- rubyzip & nokogiri gems (after installing Ruby: `gem install rubyzip:3.0.2`,`gem install nokogiri`)
 - JPEXS (latest nightly recommended) (https://github.com/jindrapetrik/jpexs-decompiler/releases) 
 - ruffle (https://ruffle.rs/downloads)
 

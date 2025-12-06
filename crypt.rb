@@ -272,8 +272,7 @@ def createBSP(inFile,outDir,bspName,brec = false)
   scriptDir = Pathname.new(__FILE__).realpath.parent
   bspSWF = scriptDir + "bsp" + "bsp.swf"
   unless bspSWF.exist?
-    puts "bsp/bsp.swf missing in script directory"
-    exit 1
+    raise "bsp/bsp.swf missing in script directory"
   end
   # get ruffle & FFDec
   ruffleFound = false
@@ -289,12 +288,10 @@ def createBSP(inFile,outDir,bspName,brec = false)
     end
   end
   if ruffle.nil? || !File.exist?(ruffle)
-    puts "error: ruffle is not installed on the system/not in PATH (download: https://ruffle.rs/downloads)"
-    exit 1
+    raise "ruffle is not installed on the system/not in PATH (download: https://ruffle.rs/downloads)"
   end
   if ffdec.nil? || !File.exist?(ffdec)
-    puts "error: JPEXS is not installed on the system"
-    exit 1
+    raise "JPEXS is not installed on the system"
   end
   bspSWFBackup = Pathname.new(Dir.tmpdir) + "bspBackup.swf"
   FileUtils.cp(bspSWF,bspSWFBackup)
@@ -316,8 +313,7 @@ def createBSP(inFile,outDir,bspName,brec = false)
     filteredContent << node
   end
   unless foundGameObj
-    puts "error: input file does not contain \"game\" object"
-    exit 1
+    raise "input file does not contain \"game\" object"
   end
   frameLabelNode = bspDoc.at_xpath('//item[@type="FrameLabelTag" and @name="level"]')
   filteredContent.reverse_each do |node|
@@ -339,8 +335,7 @@ def createBSP(inFile,outDir,bspName,brec = false)
   filteredOutput = []
   output.each_line do |line|
     if line.include?("error: no lines")
-      puts "error: no BSP lines in input"
-      exit 1
+      raise "no BSP lines in input"
     end
     break if line.include?("BSPEND")
     if line.include?("avm_trace")
@@ -348,8 +343,7 @@ def createBSP(inFile,outDir,bspName,brec = false)
     end
   end
   if filteredOutput == []
-    puts "error: no ruffle output (closed too early?)"
-    exit 1
+    raise "no ruffle output (closed too early?)"
   end
   # generate BSP arrays
   waypoints = false
@@ -394,6 +388,9 @@ def createBSP(inFile,outDir,bspName,brec = false)
   FileUtils.rm(pdag)
 end
 def decryptFile(inFile, outDir)
+  if File.extname(inFile) != ".pak"
+    raise "input file is not a .pak"
+  end
   Zip::File.open(inFile) do |zip|
     fileList = zip.entries.map(&:name)
     isPDAG = fileList.any? { |f| f.include?('PDAG') }
@@ -424,12 +421,10 @@ inFile = ARGV[0]
 outDir = ARGV[1]
 
 if not File.exist?(inFile)
-  puts "error: input \"#{inFile}\" not found"
-  exit 1
+  raise "input \"#{inFile}\" not found"
 end
 if not File.directory?(outDir)
-  puts "error: output \"#{outDir}\" not found"
-  exit 1
+  raise "output \"#{outDir}\" not found"
 end
 
 if options[:bsp]
@@ -441,7 +436,6 @@ if options[:bsp]
   end
   bspName = bspName.downcase
   createBSP(inFile,outDir,bspName,options[:brec])
-  exit 0
 elsif options[:encrypt]
   if inFile.end_with?(".pdag")
     options[:brec] ? encryptPDAGBREC(inFile,outDir) : encryptPDAGNREC(inFile,outDir)

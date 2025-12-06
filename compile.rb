@@ -41,6 +41,16 @@ unless File.directory?(gamedir)
   raise "gamedir is not a valid directory"
 end
 
+# check for game directories
+requiredDirs = %w[bsps fonts game levels music shaders sounds]
+missingDirs = requiredDirs.reject do |dir|
+  File.directory?(File.join(gamedir,dir))
+end
+
+if ! missingDirs.empty?
+  raise "gamedir is not a castle data directory"
+end
+
 if File.file?(indir)
   unless indir.downcase.end_with?('.swf')
     raise "input file must be a SWF file"

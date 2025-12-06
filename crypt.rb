@@ -270,7 +270,7 @@ def buildHeaderPDAGBREC(data)
 end
 def createBSP(inFile,outDir,bspName,brec = false)
   scriptDir = Pathname.new(__FILE__).realpath.parent
-  bspSWF = scriptDir + "bsp" + "bsp.swf"
+  bspSWF = scriptDir + "swf" + "bsp.swf"
   unless bspSWF.exist?
     raise "bsp/bsp.swf missing in script directory"
   end
@@ -301,8 +301,8 @@ def createBSP(inFile,outDir,bspName,brec = false)
   levelXML = Pathname.new(Dir.tmpdir) + "#{File.basename(inFile,'.swf')}.xml"
   system(ffdec,'-swf2xml',inFile,levelXML.to_s)
   # copy level SWF contents to bsp.swf using XML
-  levelDoc = Nokogiri::XML(File.read(levelXML.to_s))
-  bspDoc = Nokogiri::XML(File.read(bspXML.to_s))
+  levelDoc = Nokogiri::XML(File.read(levelXML.to_s)) { |config| config.huge}
+  bspDoc = Nokogiri::XML(File.read(bspXML.to_s)) { |config| config.huge}
   foundGameObj = false
   filteredContent = []
   levelDoc.xpath('/swf/tags/item').each do |node|

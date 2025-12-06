@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-require 'optparse'
 require 'rmagick'
 require 'pathname'
 require 'tempfile'

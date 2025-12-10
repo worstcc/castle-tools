@@ -20,6 +20,9 @@
 - Encrypts all SWF files in an input directory then moves the created PAK files to a output (game) directory
 - Useful for quickly applying changes made to SWF files into the game
 
+### fixSWFTags.rb
+- For input SWF: renumbers & reorders tags, fixes pixl (unknown) tags from crashing the game, set hasEndTag to true for all sprites
+
 ### bsp directory
 - Contains files for creating custom BSP PAKs (info in "bspGuide.txt")
 

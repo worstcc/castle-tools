@@ -42,7 +42,9 @@ unless File.directory?(gamedir)
 end
 
 # check for game directories
-requiredDirs = %w[bsps fonts game levels music shaders sounds]
+# requiredDirs = %w[bsps game levels music shaders sounds]
+# relax dirs for mod directories
+requiredDirs = %w[game levels]
 missingDirs = requiredDirs.reject do |dir|
   File.directory?(File.join(gamedir,dir))
 end

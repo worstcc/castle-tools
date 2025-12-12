@@ -2,17 +2,15 @@
 =begin
 pixl.swf structure: shape is placed by sprite which sets _visible to false, fixes in-game visual bugs caused by reference sometimes
 research importing image missing pixels near top left
-research alpha
 extracting ps3 pixl tags doesn't work
 add BREC mode for import/export (PIXL instead of LXIP)
 =end
-require 'rmagick'
+require 'mini_magick'
 require 'pathname'
 require 'tempfile'
 require 'tmpdir'
 require 'nokogiri'
 require 'optparse'
-include Magick
 
 def findFFDec
   ffdecPath = nil
@@ -82,41 +80,54 @@ if File.extname(inputFile).downcase == ".swf"
           next
         end
         # get pixl data
-        columns = [data[pixlHeaderIndex + 32,8]].pack("H*").unpack1("V")
-        rows = [data[pixlHeaderIndex + 40,8]].pack("H*").unpack1("V")
-        placedColumns = [data[16,4]].pack("H*").unpack1("v") / 10
-        placedRows = [data[32,4]].pack("H*").unpack1("v") / 10
+        width = [data[pixlHeaderIndex + 32,8]].pack("H*").unpack1("V")
+        height = [data[pixlHeaderIndex + 40,8]].pack("H*").unpack1("V")
+        placedWidth = [data[16,4]].pack("H*").unpack1("v") / 10
+        placedHeight = [data[32,4]].pack("H*").unpack1("v") / 10
         id = [data[pixlHeaderIndex + 160,4]].pack("H*").unpack1("v")
 
-        # placed dimensions aren't in same order all the time, making the higher number the columns seems to work
-        if placedRows > placedColumns
-          placedColumns, placedRows = placedRows, placedColumns
+        # placed dimensions aren't in same order all the time, making the higher number the width seems to work
+        if placedHeight > placedWidth
+          placedWidth, placedHeight = placedHeight, placedWidth
         end
 
         # get correct placed values
-        if placedColumns != columns
-          placedColumns = placedColumns / 2 + columns
+        if placedWidth != width
+          placedWidth = placedWidth / 2 + width
         end
-        if placedRows != rows
-          placedRows = placedRows / 2 + rows
+        if placedHeight != height
+          placedHeight = placedHeight / 2 + height
         end
-        puts "(#{id}) raw: #{columns}x#{rows}, placed: #{placedColumns}x#{placedRows}"
+        puts "(#{id}) raw: #{width}x#{height}, placed: #{placedWidth}x#{placedHeight}"
 
         byteLength = [data[pixlHeaderIndex + 96,103]].pack("H*").unpack1("V")
         imageData = data[pixlHeaderIndex + 192,byteLength * 2]
 
         # remove "cdcdcdcd" bytes from image data
-        imageData = imageData.sub(/\A(cdcdcdcd)+/,"")
-        imageData = [imageData].pack("H*")
-
-        # export image
-        image = Image.new(columns,rows)
-        image.import_pixels(0,0,columns,rows,"BGRA",imageData,CharPixel)
-        if ! options[:exportraw]
-          image = image.resize(placedColumns,placedRows)
+        imageData = [imageData.sub(/\A(cdcdcdcd)+/,"")].pack("H*").bytes
+        # build matrix & reorder bgra -> rgba for MiniMagick's get_image_from_pixels structure
+        rgbaPixels = imageData.each_slice(4).map do |b,g,r,a|
+          # undo multiplying RGB by A
+          if a == 0
+            [0,0,0,0] # transparent
+          else
+            alpha = a / 255.0
+            r2 = [[(r / alpha).round,0].max,255].min
+            g2 = [[(g / alpha).round,0].max,255].min
+            b2 = [[(b / alpha).round,0].max,255].min
+            [r2,g2,b2,a]
+          end
         end
-        if ! options[:dryrun]
-          image.write("png:" + File.join(outputDir + "#{id}.png"))
+        imagePixelMatrix = rgbaPixels.each_slice(width).map do |row|
+          row
+        end
+        # export image
+        image = MiniMagick::Image.get_image_from_pixels(imagePixelMatrix,[width,height],"rgba",8,"png")
+        unless options[:exportraw] || width == placedWidth && height == placedHeight
+          image.resize "!#{placedWidth}x#{placedHeight}"
+        end
+        unless options[:dryrun]
+          image.write(File.join(outputDir + "#{id}.png"))
         end
       end
     end
@@ -127,14 +138,25 @@ else
   # import image into copy of pixl swf
 
   # read image
-  image = Image.read(inputFile).first
+  image = MiniMagick::Image.read(inputFile)
   # if image.depth != 8
   #   raise "#{File.basename(inputFile)} depth is not 8-bit"
   # end
-  if image.columns > 1024 || image.rows > 1024
+  if image.width > 1024 || image.height > 1024
     raise "#{File.basename(inputFile)} is too large (maximum 1024x1024)"  
   end
-  imageData = image.export_pixels(0,0,image.columns,image.rows,"BGRA").pack('C*').unpack('H*').first
+  pixels = image.get_pixels("RGBA")
+  imageData = pixels.flat_map do |row|
+    row.map do |pixel|
+      r,g,b,a = pixel
+      # for transparent images to render properly the RGB values need to be multiplied by A (0.0 to 1.0)
+      alpha = a / 255.0
+      r2 = (r * alpha).round
+      g2 = (g * alpha).round
+      b2 = (b * alpha).round
+      [b2,g2,r2,a].pack("C4").unpack1("H*")
+    end
+  end.join
 
   # create pixl tag
 
@@ -145,14 +167,14 @@ else
   data << [65534].pack('v').unpack1('H*')
   data << "00" * 2
   # width
-  data << [65536 - image.columns * 10].pack('v').unpack1('H*')
+  data << [65536 - image.width * 10].pack('v').unpack1('H*')
   data << "ff" * 2
-  data << [image.columns * 10].pack('v').unpack1('H*')
+  data << [image.width * 10].pack('v').unpack1('H*')
   data << "00" * 2
   # height
-  data << [65536 - image.rows * 10].pack('v').unpack1('H*')
+  data << [65536 - image.height * 10].pack('v').unpack1('H*')
   data << "ff" * 2
-  data << [image.rows * 10].pack('v').unpack1('H*')
+  data << [image.height * 10].pack('v').unpack1('H*')
   data << "00" * 2
   # padding
   data << "cd" * 16
@@ -161,9 +183,9 @@ else
   data << "4c584950"
   data << "00" * 12
   # width
-  data << [image.columns].pack('V').unpack1('H*')
+  data << [image.width].pack('V').unpack1('H*')
   # height
-  data << [image.rows].pack('V').unpack1('H*')
+  data << [image.height].pack('V').unpack1('H*')
   data << "01000000" * 2
   data << "00" * 4
   # ?
@@ -174,10 +196,10 @@ else
   data << [imageData.length / 2].pack('V').unpack1('H*')
   data << "01000000" * 2
   # width/height/width/height
-  data << [image.columns].pack('V').unpack1('H*')
-  data << [image.rows].pack('V').unpack1('H*')
-  data << [image.columns].pack('V').unpack1('H*')
-  data << [image.rows].pack('V').unpack1('H*')
+  data << [image.width].pack('V').unpack1('H*')
+  data << [image.height].pack('V').unpack1('H*')
+  data << [image.width].pack('V').unpack1('H*')
+  data << [image.height].pack('V').unpack1('H*')
   data << "cd" * 4
   # character ID
   data << [65534].pack('v').unpack1('H*')
@@ -210,21 +232,21 @@ else
   # shape
   shape = tags.at_xpath("//item[@type='DefineShapeTag']")
   shapeBounds = shape.at_xpath("//shapeBounds")
-  shapeBounds["Xmin"] = image.columns * -10;
-  shapeBounds["Xmax"] = image.columns * 10;
-  shapeBounds["Ymin"] = image.rows * -10;
-  shapeBounds["Ymax"] = image.rows * 10;
+  shapeBounds["Xmin"] = image.width * -10;
+  shapeBounds["Xmax"] = image.width * 10;
+  shapeBounds["Ymin"] = image.height * -10;
+  shapeBounds["Ymax"] = image.height * 10;
   bitmapMatrix = shape.at_xpath("//shapes/fillStyles/fillStyles/item[last()]/bitmapMatrix")
-  bitmapMatrix["translateX"] = image.columns * -10
-  bitmapMatrix["translateY"] = image.rows * -10
+  bitmapMatrix["translateX"] = image.width * -10
+  bitmapMatrix["translateY"] = image.height * -10
   styleChangeRecord = shape.at_xpath("//shapes/shapeRecords/item[@type='StyleChangeRecord']")
-  styleChangeRecord["moveDeltaX"] = image.columns * -10
-  styleChangeRecord["moveDeltaY"] = image.rows * -10
+  styleChangeRecord["moveDeltaX"] = image.width * -10
+  styleChangeRecord["moveDeltaY"] = image.height * -10
   straightEdgeRecords = shape.xpath("//shapes/shapeRecords/item[@type='StraightEdgeRecord']")
-  straightEdgeRecords[0]["deltaX"] = image.columns * 20
-  straightEdgeRecords[1]["deltaY"] = image.rows * 20
-  straightEdgeRecords[2]["deltaX"] = image.columns * -20
-  straightEdgeRecords[3]["deltaY"] = image.rows * -20
+  straightEdgeRecords[0]["deltaX"] = image.width * 20
+  straightEdgeRecords[1]["deltaY"] = image.height * 20
+  straightEdgeRecords[2]["deltaX"] = image.width * -20
+  straightEdgeRecords[3]["deltaY"] = image.height * -20
   # pixl
   tags.at_xpath("//item[@type='UnknownTag']")["unknownData"] = data
 

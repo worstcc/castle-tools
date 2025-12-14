@@ -1,7 +1,6 @@
 #!/usr/bin/env ruby
 =begin
 pixl.swf structure: shape is placed by sprite which sets _visible to false, fixes in-game visual bugs caused by reference sometimes
-research importing image missing pixels near top left
 extracting ps3 pixl tags doesn't work
 add BREC mode for import/export (PIXL instead of LXIP)
 =end
@@ -82,21 +81,24 @@ if File.extname(inputFile).downcase == ".swf"
         # get pixl data
         width = [data[pixlHeaderIndex + 32,8]].pack("H*").unpack1("V")
         height = [data[pixlHeaderIndex + 40,8]].pack("H*").unpack1("V")
-        placedWidth = [data[16,4]].pack("H*").unpack1("v") / 10
-        placedHeight = [data[32,4]].pack("H*").unpack1("v") / 10
+        placedWidth = ([data[16,4]].pack("H*").unpack1("v").to_f / 10).round
+        placedHeight = ([data[32,4]].pack("H*").unpack1("v").to_f / 10).round
         id = [data[pixlHeaderIndex + 160,4]].pack("H*").unpack1("v")
 
-        # placed dimensions aren't in same order all the time, making the higher number the width seems to work
-        if placedHeight > placedWidth
-          placedWidth, placedHeight = placedHeight, placedWidth
-        end
+        # only get "true" placed dimensions if they are different enough from the raw dimensions
+        if (placedWidth - width).abs > 5 && (placedHeight - height).abs > 5
+          if placedHeight > placedWidth
+            # placed dimensions aren't in same order all the time, making the higher number the width seems to work
+            placedWidth, placedHeight = placedHeight, placedWidth
+          end
 
-        # get correct placed values
-        if placedWidth != width
-          placedWidth = placedWidth / 2 + width
-        end
-        if placedHeight != height
-          placedHeight = placedHeight / 2 + height
+          # get correct placed values
+          if placedWidth != width
+            placedWidth = placedWidth / 2 + width
+          end
+          if placedHeight != height
+            placedHeight = placedHeight / 2 + height
+          end
         end
         puts "(#{id}) raw: #{width}x#{height}, placed: #{placedWidth}x#{placedHeight}"
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env ruby
 =begin
 pixl.swf structure: shape is placed by sprite which sets _visible to false, fixes in-game visual bugs caused by reference sometimes
-extracting ps3 pixl tags doesn't work
-add BREC mode for import/export (PIXL instead of LXIP)
+specify placed dimensions for import
+export hybrid ps3 player/fx pixl tags
+xbla/ps3 import (big endian "PIXL")
 =end
 require 'mini_magick'
 require 'pathname'
@@ -35,9 +36,19 @@ end
 options = {}
 OptionParser.new do |opts|
   opts.banner = "usage: #{File.basename($0)} [image|swf] [output directory]"
+  opts.on("-f","--format FORMAT",String,"game version to target (steam,xbla,ps3) steam is default") do |format|
+    unless format.match?(/steam|xbla|ps3/)
+      raise "invalid format"
+    end
+    options[:format] = format
+  end
   opts.on("-r","--export-raw","use raw image dimensions in export") { options[:exportraw] = true }
   opts.on("-d","--dry-run","don't write to files"){ options[:dryrun] = true }
 end.parse!
+
+unless options[:format]
+  options[:format] = "steam"
+end
 
 if ARGV.length != 2
   puts "usage: #{File.basename($0)} [image|swf] [output directory]"
@@ -68,22 +79,44 @@ if File.extname(inputFile).downcase == ".swf"
   doc = Nokogiri::XML(File.read(swfXml)) { |config| config.huge }
 
   # collect unknown tags
+  found = false
   doc.xpath("//tags/*").each do |tag|
     if tag["unknownData"]
       data = tag["unknownData"]
-      pixlHeaderIndex = data.index("4c584950")
+      pixlHeaderIndex = data.index("4c584950") || data.index("5049584c")
       if pixlHeaderIndex
+        found = true
         # check if footer is valid
-        if data[-32,32] != "24000000280000003000000003000000"
-          puts "error: invalid pixl tag"
-          next
+        case options[:format]
+        when "steam"
+          if data[-32,32] != "24000000280000003000000003000000"
+            puts "invalid pixl tag"
+            next
+          end
+          endian = "V" # little endian
+        when "xbla"
+          if data[-32,32] != "00000024000000280000003000000003"
+            puts "invalid pixl tag"
+            next
+          end
+          endian = "N" # big endian
+        when "ps3"
+          if data[-32,32] != "00000024000000280000003000000003"
+            puts "invalid pixl tag"
+            next
+          end
+          endian = "N"
+          if data[pixlHeaderIndex,8] == "4c584950" # odd hybrid version seen in ps3 player.swf
+            next
+          end
         end
+
         # get pixl data
-        width = [data[pixlHeaderIndex + 32,8]].pack("H*").unpack1("V")
-        height = [data[pixlHeaderIndex + 40,8]].pack("H*").unpack1("V")
+        width = [data[pixlHeaderIndex + 32,8]].pack("H*").unpack1(endian)
+        height = [data[pixlHeaderIndex + 40,8]].pack("H*").unpack1(endian)
         placedWidth = ([data[16,4]].pack("H*").unpack1("v").to_f / 10).round
         placedHeight = ([data[32,4]].pack("H*").unpack1("v").to_f / 10).round
-        id = [data[pixlHeaderIndex + 160,4]].pack("H*").unpack1("v")
+        id = [data[pixlHeaderIndex + 160,8]].pack("H*").unpack1(endian)
 
         # only get "true" placed dimensions if they are different enough from the raw dimensions
         if (placedWidth - width).abs > 5 && (placedHeight - height).abs > 5
@@ -102,13 +135,21 @@ if File.extname(inputFile).downcase == ".swf"
         end
         puts "(#{id}) raw: #{width}x#{height}, placed: #{placedWidth}x#{placedHeight}"
 
-        byteLength = [data[pixlHeaderIndex + 96,103]].pack("H*").unpack1("V")
+        byteLength = [data[pixlHeaderIndex + 96,103]].pack("H*").unpack1(endian)
         imageData = data[pixlHeaderIndex + 192,byteLength * 2]
 
         # remove "cdcdcdcd" bytes from image data
         imageData = [imageData.sub(/\A(cdcdcdcd)+/,"")].pack("H*").bytes
         # build matrix & reorder bgra -> rgba for MiniMagick's get_image_from_pixels structure
-        rgbaPixels = imageData.each_slice(4).map do |b,g,r,a|
+        rgbaPixels = imageData.each_slice(4).map do |pixel|
+          case options[:format]
+          when "steam"
+            b,g,r,a = pixel
+          when "xbla"
+            a,r,g,b = pixel
+          when "ps3"
+            r,g,b,a = pixel
+          end
           # undo multiplying RGB by A
           if a == 0
             [0,0,0,0] # transparent
@@ -133,6 +174,10 @@ if File.extname(inputFile).downcase == ".swf"
         end
       end
     end
+  end
+
+  unless found
+    puts "no pixl tags found"
   end
 
   FileUtils.rm(swfXml)

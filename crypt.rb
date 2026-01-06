@@ -27,7 +27,7 @@ def unzipFile(inFile)
   Zip::File.open(inFile) do |zip|
     raise "more than one file in archive" if zip.entries.size != 1
     entry = zip.entries.first
-    return [entry.name.upcase, entry.get_input_stream.read]
+    return [entry.name.upcase, entry.get_input_stream.read.b]
   end
 end
 

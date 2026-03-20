@@ -25,7 +25,7 @@ KEYSWAPINDEXES = [
 
 def unzipFile(inFile)
   Zip::File.open(inFile) do |zip|
-    raise 'more than one file in archive' if zip.entries.size != 1
+    abort 'error: more than one file in archive' if zip.entries.size != 1
 
     entry = zip.entries.first
     return [entry.name.upcase, entry.get_input_stream.read.b]
@@ -100,7 +100,7 @@ end
 def validateChecksum(data)
   ck1 = data[-4,4].unpack1('V')
   ck2 = calcChecksum("#{data[0...-4]}\x00\x00\x00\x00")
-  raise format('checksum mismatch: %<ck1>08X != %<ck2>08X',ck1:ck1,ck2:ck2) if ck1 != ck2
+  abort format('error: checksum mismatch: %<ck1>08X != %<ck2>08X',ck1:ck1,ck2:ck2) if ck1 != ck2
 end
 
 def buildHeaderNREC(data)
@@ -277,7 +277,7 @@ end
 
 def createBSP(inFile,outDir,bspName)
   bspSWF = File.join(__dir__,'swf','bsp.swf')
-  raise 'bsp/bsp.swf missing in script directory' unless File.exist?(bspSWF)
+  abort 'error: bsp/bsp.swf missing in script directory' unless File.exist?(bspSWF)
 
   # get ruffle & FFDec
   ffdec = nil
@@ -289,8 +289,8 @@ def createBSP(inFile,outDir,bspName)
     ffdec = '/usr/bin/ffdec'
     ffdec = `which ffdec`.strip unless File.exist?(ffdec)
   end
-  raise 'ruffle is not installed on the system/not in PATH (download: https://ruffle.rs/downloads)' if ruffle.nil? || !File.exist?(ruffle)
-  raise 'JPEXS is not installed on the system' if ffdec.nil? || !File.exist?(ffdec)
+  abort 'error: ruffle is not installed on the system/not in PATH (download: https://ruffle.rs/downloads)' if ruffle.nil? || !File.exist?(ruffle)
+  abort 'error: JPEXS is not installed on the system' if ffdec.nil? || !File.exist?(ffdec)
 
   bspSWFBackup = File.join(Dir.tmpdir,'bspBackup.swf')
   FileUtils.cp(bspSWF,bspSWFBackup)
@@ -310,7 +310,7 @@ def createBSP(inFile,outDir,bspName)
 
     filteredContent << node
   end
-  raise 'input file does not contain "game" object' unless foundGameObj
+  abort 'error: input file does not contain "game" object' unless foundGameObj
 
   frameLabelNode = bspDoc.at_xpath('//item[@type="FrameLabelTag" and @name="level"]')
   filteredContent.reverse_each do |node|
@@ -330,12 +330,12 @@ def createBSP(inFile,outDir,bspName)
   # process ruffle output
   filteredOutput = []
   output.each_line do |line|
-    raise 'no BSP lines in input' if line.include?('error: no lines')
+    abort 'error: no BSP lines in input' if line.include?('error: no lines')
     break if line.include?('BSPEND')
 
     filteredOutput << line[78..] if line.include?('avm_trace')
   end
-  raise 'no ruffle output (closed too early?)' if filteredOutput == []
+  abort 'error: no ruffle output (closed too early?)' if filteredOutput == []
 
   # generate BSP arrays
   waypoints = false
@@ -381,7 +381,7 @@ def createBSP(inFile,outDir,bspName)
 end
 
 def decryptFile(inFile, outDir)
-  raise 'input file is not a .pak' if File.extname(inFile) != '.pak'
+  abort 'error: input file is not a .pak' if File.extname(inFile) != '.pak'
 
   Zip::File.open(inFile) do |zip|
     fileList = zip.entries.map(&:name)
@@ -412,8 +412,8 @@ end
 inFile = ARGV[0]
 outDir = ARGV[1]
 
-raise "input \"#{inFile}\" not found" unless File.exist?(inFile)
-raise "output \"#{outDir}\" not found" unless File.directory?(outDir)
+abort "error: input \"#{inFile}\" not found" unless File.exist?(inFile)
+abort "error: output \"#{outDir}\" not found" unless File.directory?(outDir)
 
 if options[:bsp]
   if options[:bspname]

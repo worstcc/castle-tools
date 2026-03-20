@@ -275,11 +275,9 @@ def buildHeaderPDAGBREC(data)
   ret.pack('C*')
 end
 
-def createBSP(inFile,outDir,bspName,brec: false)
-  scriptDir = Pathname.new(__FILE__).realpath.parent
-  # bspSWF = scriptDir + "swf" + "bsp.swf"
-  bspSWF = "#{scriptDir}swfbsp.swf"
-  raise 'bsp/bsp.swf missing in script directory' unless bspSWF.exist?
+def createBSP(inFile,outDir,bspName)
+  bspSWF = File.join(__dir__,'swf','bsp.swf')
+  raise 'bsp/bsp.swf missing in script directory' unless File.exist?(bspSWF)
 
   # get ruffle & FFDec
   ffdec = nil
@@ -294,16 +292,16 @@ def createBSP(inFile,outDir,bspName,brec: false)
   raise 'ruffle is not installed on the system/not in PATH (download: https://ruffle.rs/downloads)' if ruffle.nil? || !File.exist?(ruffle)
   raise 'JPEXS is not installed on the system' if ffdec.nil? || !File.exist?(ffdec)
 
-  bspSWFBackup = "#{Pathname.new(Dir.tmpdir)}bspBackup.swf"
+  bspSWFBackup = File.join(Dir.tmpdir,'bspBackup.swf')
   FileUtils.cp(bspSWF,bspSWFBackup)
   # get XML files
-  bspXML = "#{Pathname.new(Dir.tmpdir)}bsp.xml"
+  bspXML = File.join(Dir.tmpdir,'bsp.xml')
   system(ffdec,'-swf2xml',bspSWF.to_s,bspXML.to_s)
-  levelXML = Pathname.new(Dir.tmpdir) + "#{File.basename(inFile,'.swf')}.xml"
+  levelXML = File.join(Dir.tmpdir,"#{File.basename(inFile,'.swf')}.xml")
   system(ffdec,'-swf2xml',inFile,levelXML.to_s)
   # copy level SWF contents to bsp.swf using XML
-  levelDoc = Nokogiri::XML(File.read(levelXML.to_s),huge:true)
-  bspDoc = Nokogiri::XML(File.read(bspXML.to_s),huge:true)
+  levelDoc = Nokogiri::XML(File.read(levelXML.to_s),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
+  bspDoc = Nokogiri::XML(File.read(bspXML.to_s),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
   foundGameObj = false
   filteredContent = []
   levelDoc.xpath('/swf/tags/item').each do |node|
@@ -323,8 +321,7 @@ def createBSP(inFile,outDir,bspName,brec: false)
   File.write(bspXML.to_s,xmlOutput)
   system(ffdec,'-xml2swf',bspXML.to_s,bspSWF.to_s)
   # get BSP data from running bsp.swf
-  stdout = Open3.capture3(ruffle,'--scale','no-scale',bspSWF.to_s)
-  output = stdout
+  output,_stderr,_status = Open3.capture3(ruffle,'--scale','no-scale',bspSWF.to_s)
   # clean up XML files & restore bsp.swf
   FileUtils.rm(bspXML)
   FileUtils.rm(levelXML)
@@ -362,24 +359,24 @@ def createBSP(inFile,outDir,bspName,brec: false)
       lineData << line.to_f
     end
   end
-  bspData = brec ? buildHeaderPDAGBREC(lineLength) : buildHeaderPDAGNREC(lineLength)
+  bspData = options[:brec] ? buildHeaderPDAGBREC(lineLength) : buildHeaderPDAGNREC(lineLength)
   lineData.each do |value|
-    floatValue = brec ? [value].pack('g') : [value].pack('e')
+    floatValue = options[:brec] ? [value].pack('g') : [value].pack('e')
     bspData += floatValue
   end
   waypointData.each do |value|
-    floatValue = brec ? [value].pack('g') : [value].pack('e')
+    floatValue = options[:brec] ? [value].pack('g') : [value].pack('e')
     bspData += floatValue
   end
   # add extra zero bytes to prevent waypoint functions reading garbage data
   bspData += "\x00" * 2352
   # extra bytes for NREC
-  bspData += "\x10\x00\x00\x00" unless brec
+  bspData += "\x10\x00\x00\x00" unless options[:brec]
   # write BSP file
-  pdag = Pathname.new(Dir.tmpdir) + "#{bspName}.pdag"
+  pdag = File.join(Dir.tmpdir,"#{bspName}.pdag")
   File.write(pdag,bspData,mode:'wb')
   # create BSP PAK file
-  brec ? encryptPDAGBREC(pdag,outDir) : encryptPDAGNREC(pdag,outDir)
+  options[:brec] ? encryptPDAGBREC(pdag,outDir) : encryptPDAGNREC(pdag,outDir)
   FileUtils.rm(pdag)
 end
 
@@ -426,7 +423,7 @@ if options[:bsp]
     bspName = $stdin.gets.chomp
   end
   bspName = bspName.downcase
-  createBSP(inFile,outDir,bspName,options[:brec])
+  createBSP(inFile,outDir,bspName)
 elsif options[:encrypt]
   if inFile.end_with?('.pdag')
     options[:brec] ? encryptPDAGBREC(inFile,outDir) : encryptPDAGNREC(inFile,outDir)

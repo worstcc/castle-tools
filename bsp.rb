@@ -142,16 +142,6 @@ else
     levelContent << node
   end
 
-  # automatic closing of swf
-  if options[:auto]
-    bspAutoNode = levelDoc.create_element('item')
-    bspAutoNode['type'] = 'DoActionTag'
-    # "bspAuto = true;"
-    bspAutoNode['actionBytes'] = '880a0001006273704175746f00960200080096020005011d00'
-    bspAutoNode['forceWriteAsLong'] = true
-    levelContent << bspAutoNode
-  end
-
   # copy level tags to before bsp.swf tags (MetadataTag)
   bspStartTag = bspDoc.at_xpath('//item[@type="MetadataTag" and @xmlMetadata="bsp.swf"]')
   levelContent.each do |node|
@@ -163,7 +153,9 @@ else
   File.write(bspXml.path,xmlOutput)
   system(ffdec,'-xml2swf',bspXml.path,bspSwf.to_s)
   # get bsp data from running bsp.swf
-  output,_stderr,_status = Open3.capture3(ruffle,'--scale','show-all','--no-gui',bspSwf.to_s)
+  parameters = ['--scale','show-all','--no-gui']
+  parameters << '-Pauto=true' if options[:auto]
+  output,_stderr,_status = Open3.capture3(ruffle,*parameters,bspSwf.to_s)
   # process ruffle output
   bspData = []
   inBspBlock = false

@@ -152,7 +152,7 @@ function f_InitLevelBSP() {
     return false;
   }
   f_PrintBSPData();
-  if(bspAuto) {
+  if(auto == "true") {
     fscommand("quit");
   }
   return true;

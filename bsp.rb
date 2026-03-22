@@ -51,6 +51,7 @@ name = name.downcase
 # create bsp
 prevBspSwf = Tempfile.new(['','.swf'])
 FileUtils.cp(bspSwf,prevBspSwf)
+at_exit { FileUtils.cp(prevBspSwf,bspSwf) if File.exist?(prevBspSwf) }
 # get XML files
 bspXml = Tempfile.new(['','.xml'])
 system(ffdec,'-swf2xml',bspSwf.to_s,bspXml.path)
@@ -79,8 +80,6 @@ File.write(bspXml.path,xmlOutput)
 system(ffdec,'-xml2swf',bspXml.path,bspSwf.to_s)
 # get bsp data from running bsp.swf
 output,_stderr,_status = Open3.capture3(ruffle,'--scale','show-all','--no-gui',bspSwf.to_s)
-# restore bsp.swf
-FileUtils.cp(prevBspSwf,bspSwf)
 # process ruffle output
 filteredOutput = []
 output.each_line do |line|

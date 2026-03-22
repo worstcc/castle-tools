@@ -78,7 +78,7 @@ xmlOutput = xmlOutput.gsub(%r{</item><item},"</item>\n  <item")
 File.write(bspXml.path,xmlOutput)
 system(ffdec,'-xml2swf',bspXml.path,bspSwf.to_s)
 # get bsp data from running bsp.swf
-output,_stderr,_status = Open3.capture3(ruffle,'--scale','no-scale',bspSwf.to_s)
+output,_stderr,_status = Open3.capture3(ruffle,'--scale','show-all','--no-gui',bspSwf.to_s)
 # restore bsp.swf
 FileUtils.cp(prevBspSwf,bspSwf)
 # process ruffle output

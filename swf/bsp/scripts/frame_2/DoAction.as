@@ -227,8 +227,8 @@ function f_QuickDist(x,y,xx,yy) {
 function f_BuildLineList() {
   var offset = 0.001;
   var point = new Object();
-  for(n in game.game) {
-    var temp = game.game[n];
+  for(n in p_game) {
+    var temp = p_game[n];
     if(temp.bsp1) {
       var line = new lineSegment();
       line.one;
@@ -358,7 +358,7 @@ function f_TightenUpLineList() {
 function f_LocalToGame(zone,point) {
   if(zone) {
     zone.localToGlobal(point);
-    game.game.globalToLocal(point);
+    p_game.globalToLocal(point);
   }
 }
 function f_DrawLine(zone,width) {
@@ -382,14 +382,14 @@ function f_DrawWaypoint(zone,width) {
 function f_DrawBsp() {
   var len = bsp.length;
   for(var i = 0; i < len; i += bspStructSize) {
-    var temp = game.game.createEmptyMovieClip("bspLine" + i,888888 + i);
+    var temp = p_game.createEmptyMovieClip("bspLine" + i,888888 + i);
     temp.index = i;
     temp.color = random(1703936);
     f_DrawLine(temp,1.5);
   }
   var len = sortedWaypoints.length;
   for(var i = 0; i < len; i += 3) {
-    var temp = game.game.createEmptyMovieClip("bspWaypoint" + i,999999 + i);
+    var temp = p_game.createEmptyMovieClip("bspWaypoint" + i,999999 + i);
     temp.index = i;
     temp.color = random(1703936);
     f_DrawWaypoint(temp,2);
@@ -619,18 +619,18 @@ this.onEnterFrame = function() {
       var p1 = new Object();
       p1.x = prevMouseX;
       p1.y = prevMouseY;
-      game.game.globalToLocal(p1);
+      p_game.globalToLocal(p1);
       var p2 = new Object();
       p2.x = mouseX;
       p2.y = mouseY;
-      game.game.globalToLocal(p2);
+      p_game.globalToLocal(p2);
       txtPos.txt.text = txtPos.txtBG.text = "(" + f_FormatDecimal(p2.x) + "," + f_FormatDecimal(p2.y) + ")";
       // line highlighting
       var close;
       var closeP = -1;
       var len = bsp.length;
       for(var i = 0; i < len; i += bspStructSize) {
-        var temp = game.game["bspLine" + i];
+        var temp = p_game["bspLine" + i];
         if(temp.hit && temp != selectedLine) {
           f_UnselectLine(temp);
         }
@@ -650,12 +650,12 @@ this.onEnterFrame = function() {
       // waypoint highlighting
       var len = sortedWaypoints.length;
       for(var i = 0; i < len; i += 3) {
-        var temp = game.game["bspWaypoint" + i];
+        var temp = p_game["bspWaypoint" + i];
         if(temp.hit && temp != selectedWaypoint) {
           f_UnselectWaypoint(temp);
         }
       }
-      var temp = game.game["bspWaypoint" + (f_GetClosestWaypoint(p2.x) * 3)];
+      var temp = p_game["bspWaypoint" + (f_GetClosestWaypoint(p2.x) * 3)];
       if(temp != selectedWaypoint) {
         f_SelectWaypoint(temp)
       }
@@ -665,15 +665,15 @@ this.onEnterFrame = function() {
     if(isDragging) {
       var dX = (_xmouse - lastMouseX);
       var dY = (_ymouse - lastMouseY);
-      game.game._x += dX;
-      game.game._y += dY;
+      p_game._x += dX;
+      p_game._y += dY;
       lastMouseX = _xmouse;
       lastMouseY = _ymouse;
     }
     var zoomIn = Key.isDown(75) || Key.isDown(82); // J/R
     var zoomOut = Key.isDown(74) || Key.isDown(69); // K/E
     if(zoomIn || zoomOut) {
-      var scale = game.game._xscale;
+      var scale = p_game._xscale;
       var factor = zoomIn ? 1.1 : (1 / 1.1);
       var newScale = scale * factor;
       if(newScale < 5) {
@@ -688,12 +688,12 @@ this.onEnterFrame = function() {
       var p = new Object();
       p.x = mouseX;
       p.y = mouseY;
-      game.game.globalToLocal(p);
-      game.game._xscale = newScale;
-      game.game._yscale = newScale;
-      game.game.localToGlobal(p);
-      game.game._x += (mouseX - p.x);
-      game.game._y += (mouseY - p.y);
+      p_game.globalToLocal(p);
+      p_game._xscale = newScale;
+      p_game._yscale = newScale;
+      p_game.localToGlobal(p);
+      p_game._x += (mouseX - p.x);
+      p_game._y += (mouseY - p.y);
     }
     // quit
     if(Key.isDown(81)) { // Q
@@ -701,7 +701,27 @@ this.onEnterFrame = function() {
     }
   }
 };
-f_StopSprites(game.game);
+// game contains only game.game & = game.game
+// game contains more than game.game & game.game contains only abs_bottom = game
+// get p_game
+if(game.game) {
+  var i = 0;
+  for(var n in game) {
+    i++;
+  }
+  if(i == 1) {
+    p_game = game.game;
+  } else {
+    var i = 0;
+    for(var n in game.game) {
+      i++;
+    }
+    if(i == 1 && game.game.abs_bottom) {
+      p_game = game;
+    }
+  }
+}
+f_StopSprites(p_game);
 txtPos.txt.text = txtPos.txtBG.text = "";
 txtPos.txt.selectable = txtPos.txtBG.selectable = false;
 txtLineNum.txt.text = txtLineNum.txtBG.text = "";
@@ -751,7 +771,7 @@ if(f_InitLevelBSP()) {
   var p = new Object();
   p.x = 424;
   p.y = 240;
-  game.game.globalToLocal(p);
+  p_game.globalToLocal(p);
   var dist = 9999999;
   var close;
   var len = bsp.length;
@@ -762,13 +782,13 @@ if(f_InitLevelBSP()) {
     var dist2 = Math.abs(p.x - x) + Math.abs(p.y - y);
     if(dist2 < dist) {
       dist = dist2;
-      close = game.game["bspLine" + i];
+      close = p_game["bspLine" + i];
     }
   }
   if(close) {
     f_SelectLine(close);
   }
-  f_SelectWaypoint(game.game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
+  f_SelectWaypoint(p_game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
   txtPos.txt.text = txtPos.txtBG.text = "(" + p.x + "," + p.y + ")";
   // help
   txtHelp1.txt.text = "click & drag to move";
@@ -789,5 +809,6 @@ if(f_InitLevelBSP()) {
     isDragging = false;
   };
 }
+this.enabled = false;
 _quality = "high";
 stop();

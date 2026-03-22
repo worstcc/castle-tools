@@ -85,23 +85,39 @@ else
   abort 'error: input file does not contain "game.game" object' unless game2Node
   game2Sprite = levelDoc.at_xpath("//item[@type='DefineSpriteTag' and @spriteId='#{game2Node['characterId']}']")
   abort 'error: could not find game.game sprite' unless game2Sprite
-  game2SubTags = game2Sprite.xpath('subTags/item')
-  # find frame boundaries
-  frameIndices = []
-  game2SubTags.each_with_index do |node,i|
-    frameIndices << i if node['type'] == 'ShowFrameTag'
+  # detect which game sprite has the bsp objects
+  gameSpriteTags = gameSprite.xpath('subTags/item')
+  gameFrameIndices = []
+  gameSpriteTags.each_with_index do |node,i|
+    gameFrameIndices << i if node['type'] == 'ShowFrameTag'
   end
-  abort 'error: game has only one frame' if frameIndices.size < 2
+  game2SpriteTags = game2Sprite.xpath('subTags/item')
+  game2FrameIndices = []
+  game2SpriteTags.each_with_index do |node,i|
+    game2FrameIndices << i if node['type'] == 'ShowFrameTag'
+  end
+  if gameFrameIndices.size == 1 && game2FrameIndices.size > 1
+    # game.game
+    pGameSprite = game2Sprite
+    pGameTags = game2SpriteTags
+    pGameFrameIndices = game2FrameIndices
+  elsif gameFrameIndices.size > 1 && game2FrameIndices.size == 1
+    # game
+    pGameSprite = gameSprite
+    pGameTags = gameSpriteTags
+    pGameFrameIndices = gameFrameIndices
+  end
+  abort 'error: game has only one frame' if pGameFrameIndices.size < 2
   # get game's placed frame 2 objects, these sprites keep their scripts for bsp
-  frame2Nodes = game2SubTags.to_a[(frameIndices[0] + 1)...frameIndices[1]]
+  frame2Nodes = pGameTags.to_a[(pGameFrameIndices[0] + 1)...pGameFrameIndices[1]]
   frame2ChIds = frame2Nodes.select { |node| node['type'] == 'PlaceObject2Tag' }
   frame2ChIds = frame2ChIds.map { |node| node['characterId'] }
   frame2ChIds = frame2ChIds.uniq
   frame2ChIds = frame2ChIds.map(&:to_s)
   # remove game's frames after 2 & merge frame 1 & 2
-  game2SubTags[(frameIndices[1] + 1)..]&.each(&:remove)
-  game2SubTags[frameIndices[0]].remove
-  game2Sprite['frameCount'] = '1'
+  pGameTags[(pGameFrameIndices[1] + 1)..]&.each(&:remove)
+  pGameTags[pGameFrameIndices[0]].remove
+  pGameSprite['frameCount'] = '1'
   # remove doactions
   levelDoc.xpath('//item[@type="DoActionTag"]').each do |node|
     sprite = node.at_xpath('ancestor::item[@type="DefineSpriteTag"]')

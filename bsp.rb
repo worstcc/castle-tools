@@ -127,48 +127,58 @@ system(ffdec,'-xml2swf',bspXml.path,bspSwf.to_s)
 # get bsp data from running bsp.swf
 output,_stderr,_status = Open3.capture3(ruffle,'--scale','show-all','--no-gui',bspSwf.to_s)
 # process ruffle output
-filteredOutput = []
+bspData = []
+inBspBlock = false
 output.each_line do |line|
-  abort 'error: no bsp lines in input' if line.include?('error: no lines')
-  break if line.include?('BSPEND')
+  # clean line ansi
+  line = line.gsub(/\e\[[\d;]*m/,'')
 
-  filteredOutput << line[78..] if line.include?('avm_trace')
+  inBspBlock = true if line.include?('===bspstart===')
+
+  if inBspBlock
+    bspData << line[line.index('avm_trace: ') + 11..] if line.include?('avm_trace: ')
+    break if line.include?('===bspend===')
+  end
 end
-abort 'error: no ruffle output (closed too early?)' if filteredOutput == []
+abort 'error: bsp data not found in ruffle output (closed too early?)' if bspData == []
 
 # get bsp data from ruffle trace
-waypoints = false
-lineLength = 0
 lineData = []
 waypointData = []
-filteredOutput.each do |line|
+mode = nil
+bspData.each do |line|
   line = line.strip
-  next if line == 'BSPLINES'
+  break if line.include?('===bspend===')
+  next if line.include?('===bspstart===')
 
-  if line == 'BSPWAYPOINTS'
-    waypoints = true
-    next
-  end
-  next if line == 'BSPEND'
-
-  if waypoints
-    waypointData << line.to_f
-  else
-    lineLength += 1
-    lineData << line.to_f
+  case line
+  when '==lines=='
+    puts 'lines'
+    mode = :lines
+  when '==waypoints=='
+    puts 'waypoints'
+    mode = :waypoints
+  when /^\#\d+=\[.+\]$/
+    content = line.match(/\[(.+)\]/)[1]
+    values = content.split(',').map(&:to_f)
+    puts values
+    if mode == :lines
+      lineData.concat(values[0..7])
+    elsif mode == :waypoints
+      waypointData.concat(values[0..2])
+    end
   end
 end
 
 # construct pdag file
-
 # header
 pdagData = Array.new(0x14,0)
 if options[:brec]
   pdagData[0,4] = 'PDAG'.bytes
-  pdagData[0x10,4] = [lineLength].pack('N').bytes
+  pdagData[0x10,4] = [lineData.size].pack('N').bytes
 else
   pdagData[0,4] = 'GADP'.bytes
-  pdagData[0x10,4] = [lineLength].pack('V').bytes
+  pdagData[0x10,4] = [lineData.size].pack('V').bytes
 end
 pdagData = pdagData.pack('C*')
 lineData.each do |value|

@@ -147,7 +147,6 @@ function f_InitLevelBSP() {
     f_ConvertWaypointstoArray();
     f_DrawBsp();
   } else {
-    trace("error: no lines found");
     loading.txt1.txt.text = "no lines found";
     loading.txt1.txtBG.text = loading.txt1.txt.text;
     return false;
@@ -429,19 +428,30 @@ function f_PrintBSPData() {
   if(!bsp.length && !sortedWaypoints.length) {
     return;
   }
+  trace("===bspstart===")
   if(bsp.length) {
-    trace("BSPLINES");
-    for(var i = 0; i < bsp.length; i++) {
-      trace(bsp[i]);
+    trace("==lines==");
+    var len = bsp.length;
+    for(var i = 0; i < len; i += bspStructSize) {
+      var temp = new Array();
+      for(var j = i; j < i + bspStructSize; j++) {
+        temp.push(bsp[j]);
+      }
+      trace("#" + i + "=[" + temp + "]");
     }
   }
   if(sortedWaypoints.length) {
-    trace("BSPWAYPOINTS");
-    for(var i = 0; i < sortedWaypoints.length; i++) {
-      trace(sortedWaypoints[i]);
+    trace("==waypoints==");
+    var len = sortedWaypoints.length;
+    for(var i = 0; i < len; i += 3) {
+      var temp = new Array();
+      for(var j = i; j < i + 3; j++) {
+        temp.push(sortedWaypoints[j]);
+      }
+      trace("#" + (i / 3) + "=[" + temp + "]");
     }
   }
-  trace("BSPEND");
+  trace("===bspend===");
 }
 function waypoint() {
   this.x = 0;
@@ -494,7 +504,7 @@ vector2d.prototype.magnitude = function() {
   return Math.sqrt(this.x * this.x + this.y * this.y);
 };
 vector2d.prototype.normalize = function() {
-  var len = magnitude();
+  var len = this.magnitude();
   if(len == 0) {
     len = 0.0001;
   }

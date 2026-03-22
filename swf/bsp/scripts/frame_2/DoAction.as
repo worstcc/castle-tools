@@ -359,29 +359,6 @@ function f_LocalToGame(zone,point) {
     game.game.globalToLocal(point);
   }
 }
-function f_drawTestLines() {
-  game.game.attachMovie("bspObject","dio",9999999);
-  if(lineList.length) {
-    var len = lineList.length;
-    for(var i = 0; i < len; i++) {
-      var temp = lineList[i];
-      game.game.dio.lineStyle(5,random(1703936),100);
-      game.game.dio.moveTo(temp.x1,temp.y1);
-      game.game.dio.lineTo(temp.x2,temp.y2);
-    }
-  }
-  if(waypoints.length) {
-    var len = waypoints.length;
-    for(var i = 0; i < len; i++) {
-      var temp = waypoints[i];
-      game.game.dio.lineStyle(5,16711680,100);
-      game.game.dio.moveTo(temp.x - 5,temp.y - 5);
-      game.game.dio.lineTo(temp.x + 5,temp.y + 5);
-      game.game.dio.moveTo(temp.x - 5,temp.y + 5);
-      game.game.dio.lineTo(temp.x + 5,temp.y - 5);
-    }
-  }
-}
 function f_DrawLine(zone,width) {
   zone.clear();
   zone.lineStyle(width,zone.color,100,undefined,undefined,"none");

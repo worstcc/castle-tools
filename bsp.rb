@@ -49,31 +49,77 @@ abort 'invalid name' unless !name.empty? && name.match?(/^[a-zA-Z0-9]+$/)
 name = name.downcase
 
 # create bsp
+
 prevBspSwf = Tempfile.new(['','.swf'])
 FileUtils.cp(bspSwf,prevBspSwf)
 at_exit { FileUtils.cp(prevBspSwf,bspSwf) if File.exist?(prevBspSwf) }
-# get XML files
 bspXml = Tempfile.new(['','.xml'])
 system(ffdec,'-swf2xml',bspSwf.to_s,bspXml.path)
 levelXml = Tempfile.new(['','.xml'])
 system(ffdec,'-swf2xml',swf,levelXml.path)
+
 # copy level swf contents to bsp.swf using XML
+
 levelDoc = Nokogiri::XML(File.read(levelXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
 bspDoc = Nokogiri::XML(File.read(bspXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
-foundGameObj = false
-filteredContent = []
+
+# get game sprite
+gameNode = levelDoc.at_xpath('/swf/tags/item[@type="PlaceObject2Tag" and @name="game"]')
+abort 'error: input file does not contain "game" object' unless gameNode
+gameSprite = levelDoc.at_xpath("//item[@type='DefineSpriteTag' and @spriteId='#{gameNode['characterId']}']")
+abort 'error: could not find game sprite' unless gameSprite
+# game.game
+game2Node = gameSprite.at_xpath('subTags/item[@type="PlaceObject2Tag" and @name="game"]')
+abort 'error: input file does not contain "game.game" object' unless game2Node
+game2Sprite = levelDoc.at_xpath("//item[@type='DefineSpriteTag' and @spriteId='#{game2Node['characterId']}']")
+abort 'error: could not find game.game sprite' unless game2Sprite
+game2SubTags = game2Sprite.xpath('subTags/item')
+# find frame boundaries
+frameIndices = []
+game2SubTags.each_with_index do |node,i|
+  frameIndices << i if node['type'] == 'ShowFrameTag'
+end
+abort 'error: game has only one frame' if frameIndices.size < 2
+# get game's placed frame 2 objects, these sprites keep their scripts for bsp
+frame2Nodes = game2SubTags.to_a[(frameIndices[0] + 1)...frameIndices[1]]
+frame2ChIds = frame2Nodes.select { |node| node['type'] == 'PlaceObject2Tag' }
+frame2ChIds = frame2ChIds.map { |node| node['characterId'] }
+frame2ChIds = frame2ChIds.uniq
+frame2ChIds = frame2ChIds.map(&:to_s)
+# remove game's frames after 2 & merge frame 1 & 2
+game2SubTags[(frameIndices[1] + 1)..]&.each(&:remove)
+game2SubTags[frameIndices[0]].remove
+game2Sprite['frameCount'] = '1'
+# remove doactions
+levelDoc.xpath('//item[@type="DoActionTag"]').each do |node|
+  sprite = node.at_xpath('ancestor::item[@type="DefineSpriteTag"]')
+  isProtected = sprite && frame2ChIds.include?(sprite['spriteId'].to_s)
+  node.remove unless isProtected
+end
+# remove clipactions
+levelDoc.xpath('//item[@type="PlaceObject2Tag" and @placeFlagHasClipActions="true"]').each do |node|
+  node['placeFlagHasClipActions'] = 'false'
+  node.at_xpath('./clipActions').remove
+end
+
+# collect level tags, reject certain top-level tags
+levelContent = []
 levelDoc.xpath('/swf/tags/item').each do |node|
-  foundGameObj = true if node['type'] == 'PlaceObject2Tag' && node['name'] == 'game'
   break if node['type'] == 'ShowFrameTag' && node['forceWriteAsLong'] == 'false' && node.parent.name == 'tags'
 
-  filteredContent << node
-end
-abort 'error: input file does not contain "game" object' unless foundGameObj
+  next if node['type'] == 'PlaceObject2Tag' && node['name'] != 'game'
+  next if node['type'] == 'SetBackgroundColorTag'
+  next if node['type'] == 'ExportAssetsTag'
 
-frameLabelNode = bspDoc.at_xpath('//item[@type="FrameLabelTag" and @name="level"]')
-filteredContent.reverse_each do |node|
-  frameLabelNode.add_next_sibling(node.dup)
+  levelContent << node
 end
+
+# copy level tags to before bsp.swf tags (MetadataTag)
+bspStartTag = bspDoc.at_xpath('//item[@type="MetadataTag" and @xmlMetadata="bsp.swf"]')
+levelContent.each do |node|
+  bspStartTag.add_previous_sibling(node.dup)
+end
+
 xmlOutput = bspDoc.to_xml(indent:2,indent_text:'  ')
 xmlOutput = xmlOutput.gsub(%r{</item><item},"</item>\n  <item")
 File.write(bspXml.path,xmlOutput)

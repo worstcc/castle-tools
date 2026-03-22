@@ -147,7 +147,7 @@ function f_InitLevelBSP() {
     f_ConvertWaypointstoArray();
     f_DrawBsp();
   } else {
-    trace("error: no lines");
+    trace("error: no lines found");
     loading.txt1.txt.text = "no lines found";
     loading.txt1.txtBG.text = loading.txt1.txt.text;
     return false;
@@ -526,71 +526,101 @@ vector2d.prototype.normalize = function() {
 vector2d.prototype.cross = function(vector) {
   return Number(this.x * vector.y - this.y * vector.x);
 };
-this.onEnterFrame = function() {
-  if(!bspRoot) {
-    if(f_InitLevelBSP()) {
-      loaded = true;
-      loading._visible = false;
-      prevMouseX = _xmouse;
-      prevMouseY = _ymouse;
-      // counts
-      var temp = 0;
-      var len = bsp.length;
-      for(var i = 1; i < len; i += bspStructSize) {
-        temp++;
-      }
-      txtLineNum.txt.text = temp + " lines";
-      txtLineNum.txtBG.text = txtLineNum.txt.text;
-      var temp = 0;
-      var len = sortedWaypoints.length;
-      for(var i = 1; i < len; i += 3) {
-        temp++;
-      }
-      txtWaypointNum.txt.text = temp + " waypoints";
-      txtWaypointNum.txtBG.text = txtWaypointNum.txt.text;
-      // select closest line & waypoint to center
-      var p = new Object();
-      p.x = 424;
-      p.y = 240;
-      game.game.globalToLocal(p);
-      var dist = 9999999;
-      var close;
-      var len = bsp.length;
-      for(var i = 0; i < len; i += bspStructSize) {
-        // midpoint of line
-        var x = (bsp[i + 1] + bsp[i + 3]) / 2;
-        var y = (bsp[i + 2] + bsp[i + 4]) / 2;
-        var dist2 = Math.abs(p.x - x) + Math.abs(p.y - y);
-        if(dist2 < dist) {
-          dist = dist2;
-          close = game.game["bspLine" + i];
-        }
-      }
-      if(close) {
-        f_SelectLine(close);
-      }
-      f_SelectWaypoint(game.game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
-      txtPos.txt.text = txtPos.txtBG.text = "(" + p.x + "," + p.y + ")";
-      // help
-      txtHelp1.txt.text = "click & drag to move";
-      txtHelp1.txtBG.text = txtHelp1.txt.text;
-      txtHelp2.txt.text = "e/r: zoom";
-      txtHelp2.txtBG.text = txtHelp2.txt.text;
-      txtHelp3.txt.text = "q: quit";
-      txtHelp3.txtBG.text = txtHelp3.txt.text;
-      mouse.onPress = function() {
-        isDragging = true;
-        lastMouseX = _xmouse;
-        lastMouseY = _ymouse;
-      };
-      mouse.onRelease = function() {
-        isDragging = false;
-      };
-      mouse.onReleaseOutside = function() {
-        isDragging = false;
-      };
+function f_FormatDecimal(n) {
+  // show two decimals
+  var str = "" + Math.round(n * 100) / 100;
+  if(str.indexOf(".") == -1) {
+    str += ".00";
+  } else {
+    var decimals = str.length - str.indexOf(".") - 1;
+    if(decimals == 1) {
+      str += "0";
     }
   }
+  return str;
+}
+function f_StopSprites(zone,visited) {
+  // recursively stop animations in a sprite
+  // fails to stop objects with same name, inject stop doactions in xml steps?
+  if(!visited) {
+    visited = new Array();
+  }
+  for(var i = 0; i < visited.length; i++) {
+    if(visited[i] === zone) {
+      return;
+    }
+  }
+  visited.push(zone);
+  zone.stop();
+  for(var temp in zone) {
+    if(zone[temp] instanceof MovieClip) {
+      f_StopSprites(zone[temp],visited);
+    }
+  }
+}
+function f_SelectLine(zone) {
+  f_DrawLine(zone,3);
+  zone.hit = true;
+  selectedLine = zone;
+  txtLine1.txt.text = "line #" + (zone.index / bspStructSize) + ":";
+  txtLine1.txtBG.text = txtLine1.txt.text;
+  txtLine2.txt.text = "pos1=(" + bsp[zone.index + 1] + "," + bsp[zone.index + 2] + ")";
+  txtLine2.txtBG.text = txtLine2.txt.text;
+  txtLine3.txt.text = "pos2=(" + bsp[zone.index + 3] + "," + bsp[zone.index + 4] + ")";
+  txtLine3.txtBG.text = txtLine3.txt.text;
+  switch(bsp[zone.index + 5]) {
+    case 1: var temp = "plain"; break;
+    case 2: var temp = "slide"; break;
+    case 3: var temp = "slope"; break;
+    case 4: var temp = "ledge"; break;
+    case 5: var temp = "ledge slide"; break;
+    case 6: var temp = "ledge slope"; break;
+    case 100: var temp = "stairs"; break;
+    case 101: var temp = "stairs entry"; break;
+    case 200: var temp = "death box"; break;
+    case 300: var temp = "water"; break;
+    case 400: var temp = "exit"; break;
+    case 700: var temp = "function"; break;
+    case 1000: var temp = "table"; break;
+    default: var temp = "?";
+  }
+  txtLine4.txt.text = "type=" + temp + " (" + bsp[zone.index + 5] + ")";
+  txtLine4.txtBG.text = txtLine4.txt.text;
+  var temp = bsp[zone.index + 6];
+  if(temp == -1) {
+    temp = "none";
+  } else {
+    temp = "#" + (temp /= bspStructSize);
+  }
+  txtLine5.txt.text = "front=" + temp;
+  txtLine5.txtBG.text = txtLine5.txt.text;
+  var temp = bsp[zone.index + 7];
+  if(temp == -1) {
+    temp = "none";
+  } else {
+    temp = "#" + (temp /= bspStructSize);
+  }
+  txtLine6.txt.text = "back=" + temp;
+  txtLine6.txtBG.text = txtLine6.txt.text;
+}
+function f_UnselectLine(zone) {
+  f_DrawLine(zone,1.5);
+  delete zone.hit;
+}
+function f_SelectWaypoint(zone) {
+  f_DrawWaypoint(zone,4);
+  zone.hit = true;
+  selectedWaypoint = zone;
+  txtWaypoint1.txt.text = "waypoint #" + (zone.index / 3) + ":";
+  txtWaypoint1.txtBG.text = txtWaypoint1.txt.text;
+  txtWaypoint2.txt.text = "pos=(" + sortedWaypoints[zone.index] + "," + sortedWaypoints[zone.index + 1] + ")";
+  txtWaypoint2.txtBG.text = txtWaypoint2.txt.text;
+}
+function f_UnselectWaypoint(zone) {
+  f_DrawWaypoint(zone,2);
+  delete zone.hit;
+}
+this.onEnterFrame = function() {
   // mouse movement
   if(loaded) {
     var mouseX = _xmouse;
@@ -681,89 +711,7 @@ this.onEnterFrame = function() {
     }
   }
 };
-function f_FormatDecimal(n) {
-  // show two decimals
-  var str = "" + Math.round(n * 100) / 100;
-  if(str.indexOf(".") == -1) {
-    str += ".00";
-  } else {
-    var decimals = str.length - str.indexOf(".") - 1;
-    if(decimals == 1) {
-      str += "0";
-    }
-  }
-  return str;
-}
-function f_StopSprites(zone) {
-  zone.stop();
-  for(var temp in zone) {
-    if(zone[temp] instanceof MovieClip) {
-      f_StopSprites(zone[temp]);
-    }
-  }
-}
-function f_SelectLine(zone) {
-  f_DrawLine(zone,3);
-  zone.hit = true;
-  selectedLine = zone;
-  txtLine1.txt.text = "line #" + (zone.index / bspStructSize) + ":";
-  txtLine1.txtBG.text = txtLine1.txt.text;
-  txtLine2.txt.text = "pos1=(" + bsp[zone.index + 1] + "," + bsp[zone.index + 2] + ")";
-  txtLine2.txtBG.text = txtLine2.txt.text;
-  txtLine3.txt.text = "pos2=(" + bsp[zone.index + 3] + "," + bsp[zone.index + 4] + ")";
-  txtLine3.txtBG.text = txtLine3.txt.text;
-  switch(bsp[zone.index + 5]) {
-    case 1: var temp = "plain"; break;
-    case 2: var temp = "slide"; break;
-    case 3: var temp = "slope"; break;
-    case 4: var temp = "ledge"; break;
-    case 5: var temp = "ledge slide"; break;
-    case 6: var temp = "ledge slope"; break;
-    case 100: var temp = "stairs"; break;
-    case 101: var temp = "stairs entry"; break;
-    case 200: var temp = "death box"; break;
-    case 300: var temp = "water"; break;
-    case 400: var temp = "exit"; break;
-    case 700: var temp = "function"; break;
-    case 1000: var temp = "table"; break;
-    default: var temp = "?";
-  }
-  txtLine4.txt.text = "type=" + temp + " (" + bsp[zone.index + 5] + ")";
-  txtLine4.txtBG.text = txtLine4.txt.text;
-  var temp = bsp[zone.index + 6];
-  if(temp == -1) {
-    temp = "none";
-  } else {
-    temp = "#" + (temp /= bspStructSize);
-  }
-  txtLine5.txt.text = "front=" + temp;
-  txtLine5.txtBG.text = txtLine5.txt.text;
-  var temp = bsp[zone.index + 7];
-  if(temp == -1) {
-    temp = "none";
-  } else {
-    temp = "#" + (temp /= bspStructSize);
-  }
-  txtLine6.txt.text = "back=" + temp;
-  txtLine6.txtBG.text = txtLine6.txt.text;
-}
-function f_UnselectLine(zone) {
-  f_DrawLine(zone,1.5);
-  delete zone.hit;
-}
-function f_SelectWaypoint(zone) {
-  f_DrawWaypoint(zone,4);
-  zone.hit = true;
-  selectedWaypoint = zone;
-  txtWaypoint1.txt.text = "waypoint #" + (zone.index / 3) + ":";
-  txtWaypoint1.txtBG.text = txtWaypoint1.txt.text;
-  txtWaypoint2.txt.text = "pos=(" + sortedWaypoints[zone.index] + "," + sortedWaypoints[zone.index + 1] + ")";
-  txtWaypoint2.txtBG.text = txtWaypoint2.txt.text;
-}
-function f_UnselectWaypoint(zone) {
-  f_DrawWaypoint(zone,2);
-  delete zone.hit;
-}
+f_StopSprites(game.game);
 loading.txt1.txt.text = "loading";
 loading.txt1.txtBG.text = loading.txt1.txt.text;
 loading.txt1.selectable = loading.txt1.selectable = false;
@@ -792,7 +740,67 @@ for(var i = 1; i <= 3; i++) {
   this["txtHelp" + i].txtBG.selectable = this["txtHelp" + i].txt.selectable;
 }
 bspStructSize = 8;
-active_players = 1;
-game.game.gotoAndStop(2);
+if(f_InitLevelBSP()) {
+  loaded = true;
+  loading._visible = false;
+  prevMouseX = _xmouse;
+  prevMouseY = _ymouse;
+  // counts
+  var temp = 0;
+  var len = bsp.length;
+  for(var i = 1; i < len; i += bspStructSize) {
+    temp++;
+  }
+  txtLineNum.txt.text = temp + " lines";
+  txtLineNum.txtBG.text = txtLineNum.txt.text;
+  var temp = 0;
+  var len = sortedWaypoints.length;
+  for(var i = 1; i < len; i += 3) {
+    temp++;
+  }
+  txtWaypointNum.txt.text = temp + " waypoints";
+  txtWaypointNum.txtBG.text = txtWaypointNum.txt.text;
+  // select closest line & waypoint to center
+  var p = new Object();
+  p.x = 424;
+  p.y = 240;
+  game.game.globalToLocal(p);
+  var dist = 9999999;
+  var close;
+  var len = bsp.length;
+  for(var i = 0; i < len; i += bspStructSize) {
+    // midpoint of line
+    var x = (bsp[i + 1] + bsp[i + 3]) / 2;
+    var y = (bsp[i + 2] + bsp[i + 4]) / 2;
+    var dist2 = Math.abs(p.x - x) + Math.abs(p.y - y);
+    if(dist2 < dist) {
+      dist = dist2;
+      close = game.game["bspLine" + i];
+    }
+  }
+  if(close) {
+    f_SelectLine(close);
+  }
+  f_SelectWaypoint(game.game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
+  txtPos.txt.text = txtPos.txtBG.text = "(" + p.x + "," + p.y + ")";
+  // help
+  txtHelp1.txt.text = "click & drag to move";
+  txtHelp1.txtBG.text = txtHelp1.txt.text;
+  txtHelp2.txt.text = "e/r: zoom";
+  txtHelp2.txtBG.text = txtHelp2.txt.text;
+  txtHelp3.txt.text = "q: quit";
+  txtHelp3.txtBG.text = txtHelp3.txt.text;
+  mouse.onPress = function() {
+    isDragging = true;
+    lastMouseX = _xmouse;
+    lastMouseY = _ymouse;
+  };
+  mouse.onRelease = function() {
+    isDragging = false;
+  };
+  mouse.onReleaseOutside = function() {
+    isDragging = false;
+  };
+}
 _quality = "high";
 stop();

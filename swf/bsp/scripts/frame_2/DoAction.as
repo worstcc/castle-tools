@@ -152,6 +152,9 @@ function f_InitLevelBSP() {
     return false;
   }
   f_PrintBSPData();
+  if(bspAuto) {
+    fscommand("quit");
+  }
   return true;
 }
 function wpsort(a,b) {

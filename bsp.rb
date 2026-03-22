@@ -9,6 +9,7 @@ OptionParser.new do |opts|
   opts.banner = "usage: #{File.basename($PROGRAM_NAME)} [options] [input swf] [outdir]"
   opts.on('-b','--brec','use brec format (xbla/ps3)') { options[:brec] = true }
   opts.on('-nNAME','--name NAME',String,'name of pak file') { |name| options[:name] = name }
+  opts.on('-a','--auto','automatically close bsp viewer') { options[:auto] = true }
   opts.on('--blank','create a blank bsp (useful for level development)') { options[:blank] = true }
 end.parse!
 
@@ -123,6 +124,16 @@ else
     next if node['type'] == 'ExportAssetsTag'
 
     levelContent << node
+  end
+
+  # automatic closing of swf
+  if options[:auto]
+    bspAutoNode = levelDoc.create_element('item')
+    bspAutoNode['type'] = 'DoActionTag'
+    # "bspAuto = true;"
+    bspAutoNode['actionBytes'] = '880a0001006273704175746f00960200080096020005011d00'
+    bspAutoNode['forceWriteAsLong'] = true
+    levelContent << bspAutoNode
   end
 
   # copy level tags to before bsp.swf tags (MetadataTag)

@@ -6,8 +6,6 @@ require 'pathname'
 require 'tempfile'
 require 'tmpdir'
 require 'mkmf'
-require 'open3'
-require 'nokogiri'
 
 KEYSTRINGS = [
   "\x1b\xbf\x18\xcc\x86\x5d\xf4\x25\x07\xc3\xe5\xb3\xb9\x04\x5a\x14\xd7\xfc\x4c\x86\x8d\x4a\xcb\x8f".b,
@@ -245,13 +243,6 @@ def encryptPdagNrec(inFile,outDir)
   zipFile(zipPath,archiveName,encrypted)
 end
 
-def buildHeaderPdagNrec(data)
-  ret = Array.new(0x14,0)
-  ret[0,4] = 'GADP'.bytes
-  ret[0x10,4] = [data].pack('V').bytes
-  ret.pack('C*')
-end
-
 def decryptPdagBrec(inFile,outDir)
   puts "decrypting #{File.basename(inFile)} (brec)"
   name,data = unzipFile(inFile)
@@ -265,116 +256,6 @@ def encryptPdagBrec(inFile,outDir)
   archiveName = "#{File.basename(inFile,'.pdag').upcase}.PDAG.BREC"
   zipPath = outDir + "/#{File.basename(inFile,'.*').downcase}.pak"
   zipFile(zipPath,archiveName,data)
-end
-
-def buildHeaderPdagBrec(data)
-  ret = Array.new(0x14,0)
-  ret[0,4] = 'PDAG'.bytes
-  ret[0x10,4] = [data].pack('N').bytes
-  ret.pack('C*')
-end
-
-def createBsp(inFile,outDir,bspName,options)
-  bspSwf = File.join(__dir__,'swf','bsp.swf')
-  abort 'error: bsp/bsp.swf missing in script directory' unless File.exist?(bspSwf)
-
-  # get ruffle & FFDec
-  ffdec = nil
-  if RUBY_PLATFORM =~ /mswin|mingw|jruby/
-    ruffle = 'C:\\Program Files\\ruffle\\bin\\ruffle.exe'
-    ffdec = 'C:\\Program Files (x86)\\FFDec\\ffdec-cli.exe'
-  elsif RUBY_PLATFORM =~ /linux/
-    ruffle = `which ruffle`.strip
-    ffdec = '/usr/bin/ffdec'
-    ffdec = `which ffdec`.strip unless File.exist?(ffdec)
-  end
-  abort 'error: ruffle is not installed on the system/not in PATH (download: https://ruffle.rs/downloads)' if ruffle.nil? || !File.exist?(ruffle)
-  abort 'error: JPEXS is not installed on the system' if ffdec.nil? || !File.exist?(ffdec)
-
-  prevBspSwf = Tempfile.new(['','.swf'])
-  FileUtils.cp(bspSwf,prevBspSwf)
-  # get XML files
-  # bspXml = File.join(Dir.tmpdir,'bsp.xml')
-  bspXml = Tempfile.new(['','.xml'])
-  system(ffdec,'-swf2xml',bspSwf.to_s,bspXml.path)
-  levelXml = Tempfile.new(['','.xml'])
-  system(ffdec,'-swf2xml',inFile,levelXml.path)
-  # copy level swf contents to bsp.swf using XML
-  levelDoc = Nokogiri::XML(File.read(levelXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
-  bspDoc = Nokogiri::XML(File.read(bspXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
-  foundGameObj = false
-  filteredContent = []
-  levelDoc.xpath('/swf/tags/item').each do |node|
-    foundGameObj = true if node['type'] == 'PlaceObject2Tag' && node['name'] == 'game'
-    break if node['type'] == 'ShowFrameTag' && node['forceWriteAsLong'] == 'false' && node.parent.name == 'tags'
-
-    filteredContent << node
-  end
-  abort 'error: input file does not contain "game" object' unless foundGameObj
-
-  frameLabelNode = bspDoc.at_xpath('//item[@type="FrameLabelTag" and @name="level"]')
-  filteredContent.reverse_each do |node|
-    frameLabelNode.add_next_sibling(node.dup)
-  end
-  xmlOutput = bspDoc.to_xml(indent:2,indent_text:'  ')
-  xmlOutput = xmlOutput.gsub(%r{</item><item},"</item>\n  <item")
-  File.write(bspXml.path,xmlOutput)
-  system(ffdec,'-xml2swf',bspXml.path,bspSwf.to_s)
-  # get bsp data from running bsp.swf
-  output,_stderr,_status = Open3.capture3(ruffle,'--scale','no-scale',bspSwf.to_s)
-  # restore bsp.swf
-  FileUtils.cp(prevBspSwf,bspSwf)
-  # process ruffle output
-  filteredOutput = []
-  output.each_line do |line|
-    abort 'error: no bsp lines in input' if line.include?('error: no lines')
-    break if line.include?('BSPEND')
-
-    filteredOutput << line[78..] if line.include?('avm_trace')
-  end
-  abort 'error: no ruffle output (closed too early?)' if filteredOutput == []
-
-  # generate bsp arrays
-  waypoints = false
-  lineLength = 0
-  lineData = []
-  waypointData = []
-  filteredOutput.each do |line|
-    line = line.strip
-    next if line == 'BSPLINES'
-
-    if line == 'BSPWAYPOINTS'
-      waypoints = true
-      next
-    end
-    next if line == 'BSPEND'
-
-    if waypoints
-      waypointData << line.to_f
-    else
-      lineLength += 1
-      lineData << line.to_f
-    end
-  end
-  bspData = options[:brec] ? buildHeaderPdagBrec(lineLength) : buildHeaderPdagNrec(lineLength)
-  lineData.each do |value|
-    floatValue = options[:brec] ? [value].pack('g') : [value].pack('e')
-    bspData += floatValue
-  end
-  waypointData.each do |value|
-    floatValue = options[:brec] ? [value].pack('g') : [value].pack('e')
-    bspData += floatValue
-  end
-  # add extra zero bytes to prevent waypoint functions reading garbage data
-  bspData += "\x00" * 2352
-  # extra bytes for nrec
-  bspData += "\x10\x00\x00\x00" unless options[:brec]
-  # write bsp file
-  pdag = File.join(Dir.tmpdir,"#{bspName}.pdag")
-  File.write(pdag,bspData,mode:'wb')
-  # create bsp pak file
-  options[:brec] ? encryptPdagBrec(pdag,outDir) : encryptPdagNrec(pdag,outDir)
-  FileUtils.rm(pdag)
 end
 
 def decryptFile(inFile, outDir)
@@ -398,8 +279,6 @@ OptionParser.new do |opts|
   opts.banner = 'usage: crypt.rb [options]'
   opts.on('--encrypt','encrypt the input file instead of decrypting') { options[:encrypt] = true }
   opts.on('--brec','when using --encrypt, output to brec format (xbla/ps3)') { options[:brec] = true }
-  opts.on('--bsp','create a bsp pak file from input level swf') { options[:bsp] = true }
-  opts.on('--bspname NAME',String,'bsp pak file name when using --bsp option') { |name| options[:bspname] = name }
 end.parse!
 
 if ARGV.length != 2
@@ -413,16 +292,7 @@ outDir = ARGV[1]
 abort "error: input \"#{inFile}\" not found" unless File.exist?(inFile)
 abort "error: output \"#{outDir}\" not found" unless File.directory?(outDir)
 
-if options[:bsp]
-  if options[:bspname]
-    bspName = options[:bspname]
-  else
-    print 'enter bsp name: '
-    bspName = $stdin.gets.chomp
-  end
-  bspName = bspName.downcase
-  createBsp(inFile,outDir,bspName,options)
-elsif options[:encrypt]
+if options[:encrypt]
   if inFile.end_with?('.pdag')
     options[:brec] ? encryptPdagBrec(inFile,outDir) : encryptPdagNrec(inFile,outDir)
   else

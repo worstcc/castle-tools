@@ -26,7 +26,6 @@ bundle install
 - Decrypts pak files to swf/encrypts swf files to pak
 - Supports both nrec (steam version) & brec (xbla/ps3 version) pak files
 - Fixes swf file length when decrypting (fixes missing frames/assets in JPEXS)
-- Can create bsp pak files
 - Based on original nrec decryption/encryption script by ethteck (https://github.com/ethteck/castlecrashers)
 
 ### deobfuscateSwf.rb
@@ -35,6 +34,9 @@ bundle install
 ### compile.rb
 - Encrypts all swf files in an input directory then moves the created pak files to a output (game) directory
 - Useful for quickly applying changes made to swf files into the game
+
+### bsp.rb
+- Creates bsp pak files from a level swf
 
 ### fixSwfTags.rb
 - Renumbers & reorders tags, fixes pixl (unknown) tags from crashing the game, set hasEndTag to true for all sprites in a swf file
@@ -65,7 +67,7 @@ Most scripts have options which can be seen by running the script with the `--he
 
 ### Create bsp pak file using a level swf as input
 ```
-./crypt.rb --bsp --bspname [bsp name] [swf] [output directory]
+./bsp.rb --name [bsp name] [swf] [output directory]
 ```
 
 ### Encrypt swf file to brec pak

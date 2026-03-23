@@ -392,6 +392,10 @@ function f_DrawWaypoint(zone,width) {
   // zone.lineTo(sortedWaypoints[zone.index + 1] - 31,sortedWaypoints[zone.index + 2] + 31);
 }
 function f_DrawBsp() {
+  var temp = p_game.createEmptyMovieClip("bspPath",666665);
+  temp._visible = false;
+  var temp = p_game.createEmptyMovieClip("bspPartition",666666);
+  temp._visible = false;
   var len = bsp.length;
   for(var i = 0; i < len; i += bspStructSize) {
     var temp = p_game.createEmptyMovieClip("bspLine" + i,777777 + i);
@@ -406,7 +410,29 @@ function f_DrawBsp() {
     temp.color = random(1703936);
     f_DrawWaypoint(temp,2);
   }
-  p_game.createEmptyMovieClip("bspPartition",666666);
+}
+function f_DrawBspPath() {
+  p_game.bspPath.clear();
+  p_game.bspPath.lineStyle(1,0x00ffff,100,undefined,undefined,"none");
+  var len = nodePath.length;
+  for(var i = 0; i < len - 1; i++) {
+    var fromIndex = nodePath[i];
+    var toIndex = nodePath[i + 1];
+    var x1 = bsp[fromIndex + 1];
+    var y1 = bsp[fromIndex + 2];
+    var x2 = bsp[fromIndex + 3];
+    var y2 = bsp[fromIndex + 4];
+    var fromX = (x1 + x2) / 2;
+    var fromY = (y1 + y2) / 2;
+    var x1 = bsp[toIndex + 1];
+    var y1 = bsp[toIndex + 2];
+    var x2 = bsp[toIndex + 3];
+    var y2 = bsp[toIndex + 4];
+    var toX = (x1 + x2) / 2;
+    var toY = (y1 + y2) / 2;
+    p_game.bspPath.moveTo(fromX,fromY);
+    p_game.bspPath.lineTo(toX,toY);
+  }
 }
 function f_BSPHitTest(x1,y1,x2,y2) {
   bspWorkingLine.x1 = x1;
@@ -415,6 +441,8 @@ function f_BSPHitTest(x1,y1,x2,y2) {
   bspWorkingLine.y2 = y2;
   bspWorkingLine.type = 0;
   bspWorkingLine.index = 0;
+  delete nodePath;
+  nodePath = new Array();
   nodeDepth = -1;
   nodeIndex = -1;
   return f_CheckNode(0);
@@ -422,6 +450,7 @@ function f_BSPHitTest(x1,y1,x2,y2) {
 function f_CheckNode(index) {
   nodeDepth++;
   nodeIndex = index;
+  nodePath.push(index);
   var ret = 0;
   if(bsp[index + 6] < 0 && bsp[index + 7] < 0) {
     ret = f_CheckLineHit(index);
@@ -684,11 +713,12 @@ function f_SelectLine(zone,center) {
   temp.lineTo(frontX - headLen * Math.cos(angle - 0.5),frontY - headLen * Math.sin(angle - 0.5));
   temp.moveTo(frontX,frontY);
   temp.lineTo(frontX - headLen * Math.cos(angle + 0.5),frontY - headLen * Math.sin(angle + 0.5));
+  // update text
   txtLine1.txt.text = "line #" + (zone.index / bspStructSize) + ":";
   txtLine1.txtBG.text = txtLine1.txt.text;
-  txtLine2.txt.text = "pos1=(" + bsp[zone.index + 1] + "," + bsp[zone.index + 2] + ")";
+  txtLine2.txt.text = "x1,y1=(" + bsp[zone.index + 1] + "," + bsp[zone.index + 2] + ")";
   txtLine2.txtBG.text = txtLine2.txt.text;
-  txtLine3.txt.text = "pos2=(" + bsp[zone.index + 3] + "," + bsp[zone.index + 4] + ")";
+  txtLine3.txt.text = "x2,y2=(" + bsp[zone.index + 3] + "," + bsp[zone.index + 4] + ")";
   txtLine3.txtBG.text = txtLine3.txt.text;
   switch(bsp[zone.index + 5]) {
     case 1: var temp = "plain"; break;
@@ -736,7 +766,7 @@ function f_SelectWaypoint(zone) {
   selectedWaypoint = zone;
   txtWaypoint1.txt.text = "waypoint #" + (zone.index / 3) + ":";
   txtWaypoint1.txtBG.text = txtWaypoint1.txt.text;
-  txtWaypoint2.txt.text = "pos=(" + sortedWaypoints[zone.index] + "," + sortedWaypoints[zone.index + 1] + ")";
+  txtWaypoint2.txt.text = "x,y=(" + sortedWaypoints[zone.index] + "," + sortedWaypoints[zone.index + 1] + ")";
   txtWaypoint2.txtBG.text = txtWaypoint2.txt.text;
 }
 function f_Popup(temp,error) {
@@ -749,8 +779,8 @@ function f_Popup(temp,error) {
   popup.txt1.txtBG.text = popup.txt1.txt.text;
   popup.body._width = popup.txt1.txt.textWidth + 25;
   if(error) {
-    txtHelp3.txt.text = "q: quit";
-    txtHelp3.txtBG.text = txtHelp3.txt.text;
+    txtHelp1.txt.text = "q: quit";
+    txtHelp1.txtBG.text = txtHelp1.txt.text;
     onEnterFrame = f_Quit;
   }
 }
@@ -781,6 +811,36 @@ function f_UpdatePositionText(x,y) {
   txtPos.txtBG.text = txtPos.txt.text;
   txtDepth.txt.text = "depth=" + nodeDepth + "(#" + (nodeIndex / 8) + ")";
   txtDepth.txtBG.text = txtDepth.txt.text;
+}
+function f_UpdateHelpText() {
+  for(var i = 1; this["txtHelp" + i]; i++) {
+    var temp = this["txtHelp" + i];
+    temp.txt.text = "";
+    temp.txtBG.text = temp.txt.text;
+  }
+  if(detailedInfo) {
+    txtHelp6.txt.text = "click & drag to move";
+    txtHelp6.txtBG.text = txtHelp6.txt.text;
+    txtHelp5.txt.text = "e/r: zoom";
+    txtHelp5.txtBG.text = txtHelp5.txt.text;
+    txtHelp4.txt.text = "i: toggle detailed info";
+    txtHelp4.txtBG.text = txtHelp4.txt.text;
+    txtHelp3.txt.text = "n/p: navigate to front/back line";
+    txtHelp3.txtBG.text = txtHelp3.txt.text;
+    txtHelp2.txt.text = "o: select root partition line";
+    txtHelp2.txtBG.text = txtHelp2.txt.text;
+    txtHelp1.txt.text = "q: quit";
+    txtHelp1.txtBG.text = txtHelp1.txt.text;
+  } else {
+    txtHelp4.txt.text = "click & drag to move";
+    txtHelp4.txtBG.text = txtHelp4.txt.text;
+    txtHelp3.txt.text = "e/r: zoom";
+    txtHelp3.txtBG.text = txtHelp3.txt.text;
+    txtHelp2.txt.text = "i: toggle detailed info";
+    txtHelp2.txtBG.text = txtHelp2.txt.text;
+    txtHelp1.txt.text = "q: quit";
+    txtHelp1.txtBG.text = txtHelp1.txt.text;
+  }
 }
 function f_Load() {
   switch(state) {
@@ -816,6 +876,7 @@ function f_Load() {
         f_Popup("");
         prevMouseX = _xmouse;
         prevMouseY = _ymouse;
+        detailedInfo = false;
         // counts
         var temp = 0;
         var len = bsp.length;
@@ -841,13 +902,7 @@ function f_Load() {
         }
         f_BSPHitTest(p.x,p.y,p.x,p.y); // get node vars
         f_UpdatePositionText(p.x,p.y);
-        // help
-        txtHelp1.txt.text = "click & drag to move";
-        txtHelp1.txtBG.text = txtHelp1.txt.text;
-        txtHelp2.txt.text = "e/r: zoom";
-        txtHelp2.txtBG.text = txtHelp2.txt.text;
-        txtHelp3.txt.text = "q: quit";
-        txtHelp3.txtBG.text = txtHelp3.txt.text;
+        f_UpdateHelpText();
         mouse.onPress = function() {
           isDragging = true;
           lastMouseX = _xmouse;
@@ -885,7 +940,7 @@ function f_Main() {
         f_SelectLine(temp);
       }
     }
-    // trace(depth + "," + (gIndex / 8));
+    f_DrawBspPath();
     var temp = p_game["bspWaypoint" + (f_GetClosestWaypoint(p2.x) * 3)];
     if(temp != selectedWaypoint) {
       f_SelectWaypoint(temp)
@@ -949,32 +1004,68 @@ function f_Main() {
   if(f_CheckPress(79)) { // O
     f_SelectLine(p_game.bspLine0,true);
   }
+  if(f_CheckPress(73)) { // I
+    detailedInfo = !detailedInfo;
+    if(detailedInfo) {
+      var offset = -40;
+      var alpha = 100;
+    } else {
+      var offset = 40;
+      var alpha = 0;
+    }
+    p_game.bspPartition._visible = detailedInfo;
+    p_game.bspPath._visible = detailedInfo;
+    for(var i = 1; this["txtLine" + i]; i++) {
+      var temp = this["txtLine" + i];
+      temp._y += offset;
+      if(i >= 5) {
+        temp._visible = detailedInfo;
+      }
+    }
+    for(var i = 1; this["txtWaypoint" + i]; i++) {
+      var temp = this["txtWaypoint" + i];
+      temp._y += offset;
+    }
+    txtDepth._visible = detailedInfo;
+    f_UpdateHelpText();
+  }
   f_Quit();
 }
 popup.txt1.selectable = popup.txt1.selectable = false;
 txtPos.txt.text = txtPos.txtBG.text = "";
 txtPos.txt.selectable = txtPos.txtBG.selectable = false;
+txtDepth._visible = false;
+txtDepth.txt.text = txtDepth.txtBG.text = "";
+txtDepth.txt.selectable = txtDepth.txtBG.selectable = false;
 txtLineNum.txt.text = txtLineNum.txtBG.text = "";
 txtLineNum.txt.selectable = txtLineNum.txtBG.selectable = false;
 txtWaypointNum.txt.text = txtWaypointNum.txtBG.text = "";
 txtWaypointNum.txt.selectable = txtWaypointNum.txtBG.selectable = false;
-for(var i = 1; i <= 6; i++) {
-  this["txtLine" + i].txt.text = "";
-  this["txtLine" + i].txtBG.text = this["txtLine" + i].txt.text;
-  this["txtLine" + i].txt.selectable = false;
-  this["txtLine" + i].txtBG.selectable = this["txtLine" + i].txt.selectable;
+for(var i = 1; this["txtLine" + i]; i++) {
+  var temp = this["txtLine" + i];
+  temp.txt.text = "";
+  temp.txtBG.text = temp.txt.text;
+  temp.txt.selectable = false;
+  temp.txtBG.selectable = temp.txt.selectable;
+  temp._y += 40;
+  if(i >= 5) {
+    temp._visible = false;
+  }
 }
-for(var i = 1; i <= 2; i++) {
-  this["txtWaypoint" + i].txt.text = "";
-  this["txtWaypoint" + i].txtBG.text = this["txtWaypoint" + i].txt.text;
-  this["txtWaypoint" + i].txt.selectable = false;
-  this["txtWaypoint" + i].txtBG.selectable = this["txtWaypoint" + i].txt.selectable;
+for(var i = 1; this["txtWaypoint" + i]; i++) {
+  var temp = this["txtWaypoint" + i];
+  temp.txt.text = "";
+  temp.txtBG.text = temp.txt.text;
+  temp.txt.selectable = false;
+  temp.txtBG.selectable = temp.txt.selectable;
+  temp._y += 40;
 }
-for(var i = 1; i <= 3; i++) {
-  this["txtHelp" + i].txt.text = "";
-  this["txtHelp" + i].txtBG.text = this["txtHelp" + i].txt.text;
-  this["txtHelp" + i].txt.selectable = false;
-  this["txtHelp" + i].txtBG.selectable = this["txtHelp" + i].txt.selectable;
+for(var i = 1; this["txtHelp" + i]; i++) {
+  var temp = this["txtHelp" + i];
+  temp.txt.text = "";
+  temp.txtBG.text = temp.txt.text;
+  temp.txt.selectable = false;
+  temp.txtBG.selectable = temp.txt.selectable;
 }
 f_Popup("loading level...");
 _quality = "high";

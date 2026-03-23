@@ -37,6 +37,7 @@ bundle install
 
 ### bsp.rb
 - Creates bsp pak files from a level swf
+- Opens a bsp viewer with detailed information
 
 ### fixSwfTags.rb
 - Renumbers & reorders tags, fixes pixl (unknown) tags from crashing the game, set hasEndTag to true for all sprites in a swf file
@@ -68,6 +69,11 @@ Most scripts have options which can be seen by running the script with the `--he
 ### Create bsp pak file using a level swf as input
 ```
 ./bsp.rb --name [bsp name] [swf] [output directory]
+```
+
+### Create a blank bsp pak file
+```
+./bsp.rb --blank --name [bsp name] [output directory]
 ```
 
 ### Encrypt swf file to brec pak

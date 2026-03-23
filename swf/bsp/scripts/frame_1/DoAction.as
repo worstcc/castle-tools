@@ -394,18 +394,19 @@ function f_DrawWaypoint(zone,width) {
 function f_DrawBsp() {
   var len = bsp.length;
   for(var i = 0; i < len; i += bspStructSize) {
-    var temp = p_game.createEmptyMovieClip("bspLine" + i,888888 + i);
+    var temp = p_game.createEmptyMovieClip("bspLine" + i,777777 + i);
     temp.index = i;
     temp.color = random(1703936);
     f_DrawLine(temp,1.5);
   }
   var len = sortedWaypoints.length;
   for(var i = 0; i < len; i += 3) {
-    var temp = p_game.createEmptyMovieClip("bspWaypoint" + i,999999 + i);
+    var temp = p_game.createEmptyMovieClip("bspWaypoint" + i,888888 + i);
     temp.index = i;
     temp.color = random(1703936);
     f_DrawWaypoint(temp,2);
   }
+  var temp = p_game.createEmptyMovieClip("bspPartition",666666);
 }
 function f_BSPHitTest(x1,y1,x2,y2) {
   bspWorkingLine.x1 = x1;
@@ -414,21 +415,25 @@ function f_BSPHitTest(x1,y1,x2,y2) {
   bspWorkingLine.y2 = y2;
   bspWorkingLine.type = 0;
   bspWorkingLine.index = 0;
+  depth = 0;
+  gIndex = 0;
   return f_CheckNode(0);
 }
 function f_CheckNode(index) {
+  depth++;
+  gIndex = index;
   var ret = 0;
   if(bsp[index + 6] < 0 && bsp[index + 7] < 0) {
     ret = f_CheckLineHit(index);
   } else {
-    var px = bsp[index + 3] - bsp[index + 1];
-    var py = bsp[index + 4] - bsp[index + 2];
-    var lx = bspWorkingLine.x1 - bsp[index + 1];
-    var ly = bspWorkingLine.y1 - bsp[index + 2];
-    var result1 = px * ly - py * lx;
-    var lx = bspWorkingLine.x2 - bsp[index + 1];
-    var ly = bspWorkingLine.y2 - bsp[index + 2];
-    var result2 = px * ly - py * lx;
+    var pX = bsp[index + 3] - bsp[index + 1];
+    var pY = bsp[index + 4] - bsp[index + 2];
+    var lX = bspWorkingLine.x1 - bsp[index + 1];
+    var lY = bspWorkingLine.y1 - bsp[index + 2];
+    var result1 = pX * lY - pY * lX;
+    var lX = bspWorkingLine.x2 - bsp[index + 1];
+    var lY = bspWorkingLine.y2 - bsp[index + 2];
+    var result2 = pX * lY - pY * lX;
     var result = 9;
     if(result1 == 0 && result2 == 0) {
       result = 0;
@@ -644,8 +649,28 @@ function f_SelectLine(zone,center) {
   }
   f_DrawLine(zone,3);
   selectedLine = zone;
+  // draw partition line
+  var temp = p_game.bspPartition;
+  temp.clear();
+  temp.lineStyle(1,0x00ff00,100,undefined,undefined,"none");
+  var x1 = bsp[zone.index + 1];
+  var y1 = bsp[zone.index + 2];
+  var x2 = bsp[zone.index + 3];
+  var y2 = bsp[zone.index + 4];
+  var mX = (x1 + x2) / 2;
+  var mY = (y1 + y2) / 2;
+  var dX = x2 - x1;
+  var dY = y2 - y1;
+  var len = Math.sqrt(dX * dX + dY * dY);
+  var dist = 9999999;
+  dX /= len;
+  dY /= len;
+  temp.moveTo(x1,y1);
+  temp.lineTo(x1 - dX * dist,y1 - dY * dist);
+  temp.moveTo(x2,y2);
+  temp.lineTo(x2 + dX * dist,y2 + dY * dist);
   if(center) {
-    f_CenterGame((bsp[zone.index + 1] + bsp[zone.index + 3]) / 2,(bsp[zone.index + 2] + bsp[zone.index + 4]) / 2);
+    f_CenterGame(mX,mY);
   }
   txtLine1.txt.text = "line #" + (zone.index / bspStructSize) + ":";
   txtLine1.txtBG.text = txtLine1.txt.text;
@@ -877,6 +902,7 @@ function f_Main() {
         f_SelectLine(temp);
       }
     }
+    // trace(depth + "," + (gIndex / 8));
     var temp = p_game["bspWaypoint" + (f_GetClosestWaypoint(p2.x) * 3)];
     if(temp != selectedWaypoint) {
       f_SelectWaypoint(temp)

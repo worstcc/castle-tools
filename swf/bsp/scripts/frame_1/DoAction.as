@@ -644,6 +644,12 @@ function f_Quit() {
     fscommand("quit");
   }
 }
+function f_CenterGame(x,y) {
+  var sX = p_game._xscale / 100;
+  var sY = p_game._yscale / 100;
+  p_game._x = 424 - (x * sX);
+  p_game._y = 240 - (y * sY);
+}
 function f_Load() {
   switch(state) {
     case 0:
@@ -718,8 +724,7 @@ function f_Load() {
         }
         var x = (leftDist + rightDist) / 2;
         var y = (topDist + bottomDist) / 2;
-        p_game._x = 424 - x;
-        p_game._y = 240 - y;
+        f_CenterGame(x,y);
         // select closest line & waypoint to center
         var dist = 9999999;
         var close;
@@ -830,21 +835,24 @@ function f_Main() {
     if(newScale < 5) {
       newScale = 5;
     }
-    if(newScale > 500) {
-      newScale = 500;
+    if(newScale > 750) {
+      newScale = 750;
     }
     factor = newScale / scale;
-    var mouseX = _xmouse;
-    var mouseY = _ymouse;
-    var p = new Object();
-    p.x = mouseX;
-    p.y = mouseY;
-    p_game.globalToLocal(p);
-    p_game._xscale = newScale;
-    p_game._yscale = newScale;
-    p_game.localToGlobal(p);
-    p_game._x += (mouseX - p.x);
-    p_game._y += (mouseY - p.y);
+    // not at scale limit
+    if(factor != 1) {
+      var mouseX = _xmouse;
+      var mouseY = _ymouse;
+      var p = new Object();
+      p.x = mouseX;
+      p.y = mouseY;
+      p_game.globalToLocal(p);
+      p_game._xscale = newScale;
+      p_game._yscale = newScale;
+      p_game.localToGlobal(p);
+      p_game._x += (mouseX - p.x);
+      p_game._y += (mouseY - p.y);
+    }
   }
   f_Quit();
 }

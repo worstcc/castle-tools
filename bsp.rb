@@ -19,7 +19,7 @@ if options[:blank]
   abort "usage: #{File.basename($PROGRAM_NAME)} [options] [input swf] [outdir]" if ARGV.length != 1
 else
   abort "usage: #{File.basename($PROGRAM_NAME)} [options] [input swf] [outdir]" if ARGV.length != 2
-  swf = ARGV[0]
+  swf = File.expand_path(ARGV[0])
   outDir = ARGV[1]
   abort "error: file '#{swf}' does not exist" unless File.exist?(swf)
   abort "error: '#{swf}' is not a .swf file" unless swf.downcase.end_with?('.swf')

@@ -692,19 +692,41 @@ function f_Load() {
         }
         txtWaypointNum.txt.text = temp + " waypoints";
         txtWaypointNum.txtBG.text = txtWaypointNum.txt.text;
-        // select closest line & waypoint to center
-        var p = new Object();
-        p.x = 424;
-        p.y = 240;
-        p_game.globalToLocal(p);
-        var dist = 9999999;
+        // center p_game based on bsp bounds
+        var leftDist = -9999999;
+        var rightDist = 9999999;
+        var topDist = -9999999;
+        var bottomDist = 9999999;
         var close;
         var len = bsp.length;
         for(var i = 0; i < len; i += bspStructSize) {
           // midpoint of line
-          var x = (bsp[i + 1] + bsp[i + 3]) / 2;
-          var y = (bsp[i + 2] + bsp[i + 4]) / 2;
-          var dist2 = Math.abs(p.x - x) + Math.abs(p.y - y);
+          var tempX = (bsp[i + 1] + bsp[i + 3]) / 2;
+          var tempY = (bsp[i + 2] + bsp[i + 4]) / 2;
+          if(tempX > leftDist) {
+            leftDist = tempX;
+          }
+          if(tempX < rightDist) {
+            rightDist = tempX;
+          }
+          if(tempY > topDist) {
+            topDist = tempY;
+          }
+          if(tempY < bottomDist) {
+            bottomDist = tempY;
+          }
+        }
+        var x = (leftDist + rightDist) / 2;
+        var y = (topDist + bottomDist) / 2;
+        p_game._x = 424 - x;
+        p_game._y = 240 - y;
+        // select closest line & waypoint to center
+        var dist = 9999999;
+        var close;
+        for(var i = 0; i < len; i += bspStructSize) {
+          var tempX = (bsp[i + 1] + bsp[i + 3]) / 2;
+          var tempY = (bsp[i + 2] + bsp[i + 4]) / 2;
+          var dist2 = Math.abs(x - tempX) + Math.abs(y - tempY);
           if(dist2 < dist) {
             dist = dist2;
             close = p_game["bspLine" + i];
@@ -716,7 +738,7 @@ function f_Load() {
         if(sortedWaypoints.length > 0) {
           f_SelectWaypoint(p_game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
         }
-        txtPos.txt.text = txtPos.txtBG.text = "(" + p.x + "," + p.y + ")";
+        txtPos.txt.text = txtPos.txtBG.text = "(" + f_FormatDecimal(x) + "," + f_FormatDecimal(y) + ")";
         // help
         txtHelp1.txt.text = "click & drag to move";
         txtHelp1.txtBG.text = txtHelp1.txt.text;

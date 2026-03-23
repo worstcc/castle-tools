@@ -29,7 +29,7 @@ function f_ClassifyLine(partition,line) {
 function f_SplitLine(apartition,aline,aline2) {
   aline2.x2 = aline.x2;
   aline2.y2 = aline.y2;
-  aline2.n_type = aline.n_type;
+  aline2.type = aline.type;
   var t = aline.intersect(apartition);
   var newX = aline.x1 + t * (aline.x2 - aline.x1);
   var newY = aline.y1 + t * (aline.y2 - aline.y1);
@@ -44,10 +44,7 @@ function f_BuildBSPTree(node,list) {
   var partition = f_ChooseBestPartitionLine(list);
   // var partition = list.pop();
   node.partition.copy(partition);
-  node.partition.n_type = partition.n_type;
-  // if(node == bspRoot) {
-  //   trace("partition line: " + node.partition.x1 + "," + node.partition.y1 + "," + node.partition.x2 + "," + node.partition.y2 + "," + node.partition.n_type);
-  // }
+  node.partition.type = partition.type;
   while(list.length > 0) {
     var line = list.pop();
     var result = f_ClassifyLine(partition,line);
@@ -213,7 +210,7 @@ function f_ConvertBSPtoArray(node) {
   bsp[bspIndex + 2] = node.partition.y1;
   bsp[bspIndex + 3] = node.partition.x2;
   bsp[bspIndex + 4] = node.partition.y2;
-  bsp[bspIndex + 5] = node.partition.n_type;
+  bsp[bspIndex + 5] = node.partition.type;
   if(node.front) {
     bsp[bspIndex + 6] = bspIndex + bspStructSize;
     bspIndex += bspStructSize;
@@ -258,7 +255,7 @@ function f_BuildLineList() {
       f_LocalToGame(temp.bsp2,point);
       line.x2 = point.x;
       line.y2 = point.y - offset;
-      line.n_type = temp.n_type;
+      line.type = temp.n_type;
       lineList.push(line);
       offset += 0.001;
     }
@@ -410,6 +407,82 @@ function f_DrawBsp() {
     f_DrawWaypoint(temp,2);
   }
 }
+function f_BSPHitTest(x1,y1,x2,y2) {
+  bspWorkingLine.x1 = x1;
+  bspWorkingLine.y1 = y1;
+  bspWorkingLine.x2 = x2;
+  bspWorkingLine.y2 = y2;
+  bspWorkingLine.type = 0;
+  bspWorkingLine.index = 0;
+  return f_CheckNode(0);
+}
+function f_CheckNode(index) {
+  var ret = 0;
+  if(bsp[index + 6] < 0 && bsp[index + 7] < 0) {
+    ret = f_CheckLineHit(index);
+  } else {
+    var px = bsp[index + 3] - bsp[index + 1];
+    var py = bsp[index + 4] - bsp[index + 2];
+    var lx = bspWorkingLine.x1 - bsp[index + 1];
+    var ly = bspWorkingLine.y1 - bsp[index + 2];
+    var result1 = px * ly - py * lx;
+    var lx = bspWorkingLine.x2 - bsp[index + 1];
+    var ly = bspWorkingLine.y2 - bsp[index + 2];
+    var result2 = px * ly - py * lx;
+    var result = 9;
+    if(result1 == 0 && result2 == 0) {
+      result = 0;
+    } else if(result1 >= 0 && result2 >= 0) {
+      result = 1;
+    } else if(result1 <= 0 && result2 <= 0) {
+      result = 2;
+    } else if(result1 >= 0 && result2 <= 0) {
+      result = 3;
+    } else if(result1 <= 0 && result2 >= 0) {
+      result = 4;
+    }
+    if(result < 3) {
+      if(result == 1) {
+        if(bsp[index + 6] > 0) {
+          ret = f_CheckNode(bsp[index + 6]);
+        } else {
+          ret = 0;
+        }
+      } else if(result == 2) {
+        if(bsp[index + 7] > 0) {
+          ret = f_CheckNode(bsp[index + 7]);
+        } else {
+          ret = 0;
+        }
+      }
+    } else if(result == 3) {
+      if(bsp[index + 6] > 0) {
+        ret = f_CheckNode(bsp[index + 6]);
+      }
+      if(!ret) {
+        ret = f_CheckLineHit(index);
+      }
+      if(!ret) {
+        if(bsp[index + 7] > 0) {
+          ret = f_CheckNode(bsp[index + 7]);
+        }
+      }
+    } else if(result == 4) {
+      if(bsp[index + 7] > 0) {
+        ret = f_CheckNode(bsp[index + 7]);
+      }
+      if(!ret) {
+        ret = f_CheckLineHit(index);
+      }
+      if(!ret) {
+        if(bsp[index + 6] > 0) {
+          ret = f_CheckNode(bsp[index + 6]);
+        }
+      }
+    }
+  }
+  return ret;
+}
 function f_CheckLineHit(index) {
   var ret2 = 0;
   var aX = bsp[index + 1];
@@ -434,9 +507,9 @@ function f_CheckLineHit(index) {
       t2 = num / denom;
     }
     if(t2 >= 0 && t2 <= 1) {
-      bspWorkingLine.n_type = bsp[index + 5];
-      bspWorkingLine.n_index = index;
-      bspWorkingLine.n_slope = (bY - aY) / (bX - aX);
+      bspWorkingLine.type = bsp[index + 5];
+      bspWorkingLine.index = index;
+      bspWorkingLine.slope = (bY - aY) / (bX - aX);
       ret2 = t2;
     }
   }
@@ -481,7 +554,7 @@ function bspTreeNode() {
   this.back;
 }
 function lineSegment() {
-  this.n_type = 0;
+  this.type = 0;
   this.x1 = 0;
   this.y1 = 0;
   this.x2 = 0;
@@ -563,8 +636,13 @@ function f_StopSprites(zone,visited) {
   }
 }
 function f_SelectLine(zone,center) {
+  if(selectedLine == zone) {
+    return;
+  }
+  if(selectedLine) {
+    f_DrawLine(selectedLine,1.5);
+  }
   f_DrawLine(zone,3);
-  zone.hit = true;
   selectedLine = zone;
   if(center) {
     f_CenterGame((bsp[zone.index + 1] + bsp[zone.index + 3]) / 2,(bsp[zone.index + 2] + bsp[zone.index + 4]) / 2);
@@ -610,22 +688,19 @@ function f_SelectLine(zone,center) {
   txtLine6.txt.text = "back=" + temp;
   txtLine6.txtBG.text = txtLine6.txt.text;
 }
-function f_UnselectLine(zone) {
-  f_DrawLine(zone,1.5);
-  delete zone.hit;
-}
 function f_SelectWaypoint(zone) {
+  if(selectedWaypoint == zone) {
+    return;
+  }
+  if(selectedWaypoint) {
+    f_DrawWaypoint(selectedWaypoint,2);
+  }
   f_DrawWaypoint(zone,4);
-  zone.hit = true;
   selectedWaypoint = zone;
   txtWaypoint1.txt.text = "waypoint #" + (zone.index / 3) + ":";
   txtWaypoint1.txtBG.text = txtWaypoint1.txt.text;
   txtWaypoint2.txt.text = "pos=(" + sortedWaypoints[zone.index] + "," + sortedWaypoints[zone.index + 1] + ")";
   txtWaypoint2.txtBG.text = txtWaypoint2.txt.text;
-}
-function f_UnselectWaypoint(zone) {
-  f_DrawWaypoint(zone,2);
-  delete zone.hit;
 }
 function f_Popup(temp,error) {
   if(temp == "") {
@@ -795,40 +870,18 @@ function f_Main() {
     p2.y = mouseY;
     p_game.globalToLocal(p2);
     txtPos.txt.text = txtPos.txtBG.text = "(" + f_FormatDecimal(p2.x) + "," + f_FormatDecimal(p2.y) + ")";
-    // line highlighting
-    var close;
-    var closeP = -1;
-    var len = bsp.length;
-    for(var i = 0; i < len; i += bspStructSize) {
-      var temp = p_game["bspLine" + i];
-      if(temp.hit && temp != selectedLine) {
-        f_UnselectLine(temp);
-      }
-      bspWorkingLine.x1 = p1.x;
-      bspWorkingLine.y1 = p1.y;
-      bspWorkingLine.x2 = p2.x;
-      bspWorkingLine.y2 = p2.y;
-      var p = f_CheckLineHit(i);
-      if(p > closeP) {
-        close = temp;
-        closeP = p;
-      }
-    }
-    if(closeP > 0 && close != selectedLine) {
-      f_SelectLine(close);
-    }
-    // waypoint highlighting
-    var len = sortedWaypoints.length;
-    for(var i = 0; i < len; i += 3) {
-      var temp = p_game["bspWaypoint" + i];
-      if(temp.hit && temp != selectedWaypoint) {
-        f_UnselectWaypoint(temp);
+    // highlighting
+    if(f_BSPHitTest(p1.x,p1.y,p2.x,p2.y)) {
+      var temp = p_game["bspLine" + bspWorkingLine.index];
+      if(temp) {
+        f_SelectLine(temp);
       }
     }
     var temp = p_game["bspWaypoint" + (f_GetClosestWaypoint(p2.x) * 3)];
     if(temp != selectedWaypoint) {
       f_SelectWaypoint(temp)
     }
+    // test
     prevMouseX = mouseX;
     prevMouseY = mouseY;
   }

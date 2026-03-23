@@ -562,10 +562,13 @@ function f_StopSprites(zone,visited) {
     }
   }
 }
-function f_SelectLine(zone) {
+function f_SelectLine(zone,center) {
   f_DrawLine(zone,3);
   zone.hit = true;
   selectedLine = zone;
+  if(center) {
+    f_CenterGame((bsp[zone.index + 1] + bsp[zone.index + 3]) / 2,(bsp[zone.index + 2] + bsp[zone.index + 4]) / 2);
+  }
   txtLine1.txt.text = "line #" + (zone.index / bspStructSize) + ":";
   txtLine1.txtBG.text = txtLine1.txt.text;
   txtLine2.txt.text = "pos1=(" + bsp[zone.index + 1] + "," + bsp[zone.index + 2] + ")";
@@ -638,6 +641,17 @@ function f_Popup(temp,error) {
     txtHelp3.txtBG.text = txtHelp3.txt.text;
     onEnterFrame = f_Quit;
   }
+}
+function f_CheckPress(temp) {
+  if(Key.isDown(temp)) {
+    if(!this["pressed" + temp]) {
+      this["pressed" + temp] = true;
+      return true;
+    }
+  } else if(this["pressed" + temp]) {
+    delete this["pressed" + temp];
+  }
+  return false;
 }
 function f_Quit() {
   if(Key.isDown(81)) { // Q
@@ -853,6 +867,25 @@ function f_Main() {
       p_game._x += (mouseX - p.x);
       p_game._y += (mouseY - p.y);
     }
+  }
+  // navigate line neighbors
+  if(selectedLine) {
+    if(f_CheckPress(78)) { // N
+      var front = bsp[selectedLine.index + 6];
+      if(front != -1) {
+        f_SelectLine(p_game["bspLine" + front],true);
+      }
+    }
+    if(f_CheckPress(80)) { // P
+      var back = bsp[selectedLine.index + 7];
+      if(back != -1) {
+        f_SelectLine(p_game["bspLine" + back],true);
+      }
+    }
+  }
+  // select root partition line
+  if(f_CheckPress(79)) { // O
+    f_SelectLine(p_game.bspLine0,true);
   }
   f_Quit();
 }

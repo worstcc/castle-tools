@@ -793,7 +793,8 @@ function f_Load() {
       break;
     case 1:
       if(f_InitLevelBSP()) {
-        overlay._visible = false;
+        p_game._xscale = 75;
+        p_game._yscale = 75;
         f_Popup("");
         prevMouseX = _xmouse;
         prevMouseY = _ymouse;
@@ -812,48 +813,11 @@ function f_Load() {
         }
         txtWaypointNum.txt.text = temp + " waypoints";
         txtWaypointNum.txtBG.text = txtWaypointNum.txt.text;
-        // center p_game based on bsp bounds
-        var leftDist = -9999999;
-        var rightDist = 9999999;
-        var topDist = -9999999;
-        var bottomDist = 9999999;
-        var close;
-        var len = bsp.length;
-        for(var i = 0; i < len; i += bspStructSize) {
-          // midpoint of line
-          var tempX = (bsp[i + 1] + bsp[i + 3]) / 2;
-          var tempY = (bsp[i + 2] + bsp[i + 4]) / 2;
-          if(tempX > leftDist) {
-            leftDist = tempX;
-          }
-          if(tempX < rightDist) {
-            rightDist = tempX;
-          }
-          if(tempY > topDist) {
-            topDist = tempY;
-          }
-          if(tempY < bottomDist) {
-            bottomDist = tempY;
-          }
-        }
-        var x = (leftDist + rightDist) / 2;
-        var y = (topDist + bottomDist) / 2;
-        f_CenterGame(x,y);
-        // select closest line & waypoint to center
-        var dist = 9999999;
-        var close;
-        for(var i = 0; i < len; i += bspStructSize) {
-          var tempX = (bsp[i + 1] + bsp[i + 3]) / 2;
-          var tempY = (bsp[i + 2] + bsp[i + 4]) / 2;
-          var dist2 = Math.abs(x - tempX) + Math.abs(y - tempY);
-          if(dist2 < dist) {
-            dist = dist2;
-            close = p_game["bspLine" + i];
-          }
-        }
-        if(close) {
-          f_SelectLine(close);
-        }
+        f_SelectLine(p_game.bspLine0,true);
+        var p = new Object();
+        p.x = 424;
+        p.y = 240;
+        p_game.globalToLocal(p);
         if(sortedWaypoints.length > 0) {
           f_SelectWaypoint(p_game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
         }

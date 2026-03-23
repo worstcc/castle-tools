@@ -685,8 +685,8 @@ function f_Load() {
         }
         txtLineNum.txt.text = temp + " lines";
         txtLineNum.txtBG.text = txtLineNum.txt.text;
-        var temp = 0;
         var len = sortedWaypoints.length;
+        var temp = 0;
         for(var i = 1; i < len; i += 3) {
           temp++;
         }
@@ -713,7 +713,9 @@ function f_Load() {
         if(close) {
           f_SelectLine(close);
         }
-        f_SelectWaypoint(p_game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
+        if(sortedWaypoints.length > 0) {
+          f_SelectWaypoint(p_game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
+        }
         txtPos.txt.text = txtPos.txtBG.text = "(" + p.x + "," + p.y + ")";
         // help
         txtHelp1.txt.text = "click & drag to move";

@@ -415,13 +415,13 @@ function f_BSPHitTest(x1,y1,x2,y2) {
   bspWorkingLine.y2 = y2;
   bspWorkingLine.type = 0;
   bspWorkingLine.index = 0;
-  depth = 0;
-  gIndex = 0;
+  nodeDepth = -1;
+  nodeIndex = -1;
   return f_CheckNode(0);
 }
 function f_CheckNode(index) {
-  depth++;
-  gIndex = index;
+  nodeDepth++;
+  nodeIndex = index;
   var ret = 0;
   if(bsp[index + 6] < 0 && bsp[index + 7] < 0) {
     ret = f_CheckLineHit(index);
@@ -764,6 +764,12 @@ function f_CenterGame(x,y) {
   p_game._x = 424 - (x * sX);
   p_game._y = 240 - (y * sY);
 }
+function f_UpdatePositionText(x,y) {
+  txtPos.txt.text = "x,y=(" + f_FormatDecimal(x) + "," + f_FormatDecimal(y) + ")";
+  txtPos.txtBG.text = txtPos.txt.text;
+  txtDepth.txt.text = "depth=" + nodeDepth + "(#" + (nodeIndex / 8) + ")";
+  txtDepth.txtBG.text = txtDepth.txt.text;
+}
 function f_Load() {
   switch(state) {
     case 0:
@@ -821,7 +827,8 @@ function f_Load() {
         if(sortedWaypoints.length > 0) {
           f_SelectWaypoint(p_game["bspWaypoint" + (f_GetClosestWaypoint(p.x) * 3)]);
         }
-        txtPos.txt.text = txtPos.txtBG.text = "(" + f_FormatDecimal(x) + "," + f_FormatDecimal(y) + ")";
+        f_BSPHitTest(p.x,p.y,p.x,p.y); // get node vars
+        f_UpdatePositionText(p.x,p.y);
         // help
         txtHelp1.txt.text = "click & drag to move";
         txtHelp1.txtBG.text = txtHelp1.txt.text;
@@ -858,7 +865,7 @@ function f_Main() {
     p2.x = mouseX;
     p2.y = mouseY;
     p_game.globalToLocal(p2);
-    txtPos.txt.text = txtPos.txtBG.text = "(" + f_FormatDecimal(p2.x) + "," + f_FormatDecimal(p2.y) + ")";
+    f_UpdatePositionText(p2.x,p2.y);
     // highlighting
     if(f_BSPHitTest(p1.x,p1.y,p2.x,p2.y)) {
       var temp = p_game["bspLine" + bspWorkingLine.index];

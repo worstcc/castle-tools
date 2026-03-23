@@ -26,17 +26,13 @@ else
   bspSwf = File.join(__dir__,'swf','bsp.swf')
   abort 'error: bsp/bsp.swf missing in script directory' unless File.exist?(bspSwf)
 
-  ffdec = nil
+  ruffle = nil
   if RUBY_PLATFORM =~ /mswin|mingw|jruby/
     ruffle = 'C:\\Program Files\\ruffle\\bin\\ruffle.exe'
-    ffdec = 'C:\\Program Files (x86)\\FFDec\\ffdec-cli.exe'
   elsif RUBY_PLATFORM =~ /linux/
     ruffle = `which ruffle`.strip
-    ffdec = '/usr/bin/ffdec'
-    ffdec = `which ffdec`.strip unless File.exist?(ffdec)
   end
   abort 'error: ruffle is not installed on the system/not in PATH (download: https://ruffle.rs/downloads)' if ruffle.nil? || !File.exist?(ruffle)
-  abort 'error: JPEXS is not installed on the system' if ffdec.nil? || !File.exist?(ffdec)
   abort "error: directory '#{outDir}' does not exist" unless File.directory?(outDir)
 end
 cryptRb = File.join(__dir__,'crypt.rb')
@@ -62,98 +58,8 @@ if options[:blank]
     ===bspend===
   LINES
 else
-  prevBspSwf = Tempfile.new(['','.swf'])
-  FileUtils.cp(bspSwf,prevBspSwf)
-  at_exit { FileUtils.cp(prevBspSwf,bspSwf) if File.exist?(prevBspSwf) }
-  bspXml = Tempfile.new(['','.xml'])
-  system(ffdec,'-swf2xml',bspSwf.to_s,bspXml.path)
-  levelXml = Tempfile.new(['','.xml'])
-  system(ffdec,'-swf2xml',swf,levelXml.path)
-
-  # copy level swf contents to bsp.swf using XML
-
-  levelDoc = Nokogiri::XML(File.read(levelXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
-  bspDoc = Nokogiri::XML(File.read(bspXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
-
-  # get game sprite
-  gameNode = levelDoc.at_xpath('/swf/tags/item[@type="PlaceObject2Tag" and @name="game"]')
-  abort 'error: input file does not contain "game" object' unless gameNode
-  gameSprite = levelDoc.at_xpath("//item[@type='DefineSpriteTag' and @spriteId='#{gameNode['characterId']}']")
-  abort 'error: could not find game sprite' unless gameSprite
-  # game.game
-  game2Node = gameSprite.at_xpath('subTags/item[@type="PlaceObject2Tag" and @name="game"]')
-  abort 'error: input file does not contain "game.game" object' unless game2Node
-  game2Sprite = levelDoc.at_xpath("//item[@type='DefineSpriteTag' and @spriteId='#{game2Node['characterId']}']")
-  abort 'error: could not find game.game sprite' unless game2Sprite
-  # detect which game sprite has the bsp objects
-  gameSpriteTags = gameSprite.xpath('subTags/item')
-  gameFrameIndices = []
-  gameSpriteTags.each_with_index do |node,i|
-    gameFrameIndices << i if node['type'] == 'ShowFrameTag'
-  end
-  game2SpriteTags = game2Sprite.xpath('subTags/item')
-  game2FrameIndices = []
-  game2SpriteTags.each_with_index do |node,i|
-    game2FrameIndices << i if node['type'] == 'ShowFrameTag'
-  end
-  if gameFrameIndices.size == 1 && game2FrameIndices.size > 1
-    # game.game
-    pGameSprite = game2Sprite
-    pGameTags = game2SpriteTags
-    pGameFrameIndices = game2FrameIndices
-  elsif gameFrameIndices.size > 1 && game2FrameIndices.size == 1
-    # game
-    pGameSprite = gameSprite
-    pGameTags = gameSpriteTags
-    pGameFrameIndices = gameFrameIndices
-  end
-  abort 'error: game has only one frame' if pGameFrameIndices.size < 2
-  # get game's placed frame 2 objects, these sprites keep their scripts for bsp
-  frame2Nodes = pGameTags.to_a[(pGameFrameIndices[0] + 1)...pGameFrameIndices[1]]
-  frame2ChIds = frame2Nodes.select { |node| node['type'] == 'PlaceObject2Tag' }
-  frame2ChIds = frame2ChIds.map { |node| node['characterId'] }
-  frame2ChIds = frame2ChIds.uniq
-  frame2ChIds = frame2ChIds.map(&:to_s)
-  # remove game's frames after 2 & merge frame 1 & 2
-  pGameTags[(pGameFrameIndices[1] + 1)..]&.each(&:remove)
-  pGameTags[pGameFrameIndices[0]].remove
-  pGameSprite['frameCount'] = '1'
-  # remove doactions
-  levelDoc.xpath('//item[@type="DoActionTag"]').each do |node|
-    sprite = node.at_xpath('ancestor::item[@type="DefineSpriteTag"]')
-    isProtected = sprite && frame2ChIds.include?(sprite['spriteId'].to_s)
-    node.remove unless isProtected
-  end
-  # remove clipactions
-  levelDoc.xpath('//item[@type="PlaceObject2Tag" and @placeFlagHasClipActions="true"]').each do |node|
-    node['placeFlagHasClipActions'] = 'false'
-    node.at_xpath('./clipActions').remove
-  end
-
-  # collect level tags, reject certain top-level tags
-  levelContent = []
-  levelDoc.xpath('/swf/tags/item').each do |node|
-    break if node['type'] == 'ShowFrameTag' && node['forceWriteAsLong'] == 'false' && node.parent.name == 'tags'
-
-    next if node['type'] == 'PlaceObject2Tag' && node['name'] != 'game'
-    next if node['type'] == 'SetBackgroundColorTag'
-    next if node['type'] == 'ExportAssetsTag'
-
-    levelContent << node
-  end
-
-  # copy level tags to before bsp.swf tags (MetadataTag)
-  bspStartTag = bspDoc.at_xpath('//item[@type="MetadataTag" and @xmlMetadata="bsp.swf"]')
-  levelContent.each do |node|
-    bspStartTag.add_previous_sibling(node.dup)
-  end
-
-  xmlOutput = bspDoc.to_xml(indent:2,indent_text:'  ')
-  xmlOutput = xmlOutput.gsub(%r{</item><item},"</item>\n  <item")
-  File.write(bspXml.path,xmlOutput)
-  system(ffdec,'-xml2swf',bspXml.path,bspSwf.to_s)
   # get bsp data from running bsp.swf
-  parameters = ['--scale','show-all','--no-gui']
+  parameters = ['--scale','show-all','--no-gui','--filesystem-access-mode','allow',"-PinputLevel=#{swf}"]
   parameters << '-Pauto=true' if options[:auto]
   output,_stderr,_status = Open3.capture3(ruffle,*parameters,bspSwf.to_s)
   # process ruffle output

@@ -406,7 +406,7 @@ function f_DrawBsp() {
     temp.color = random(1703936);
     f_DrawWaypoint(temp,2);
   }
-  var temp = p_game.createEmptyMovieClip("bspPartition",666666);
+  p_game.createEmptyMovieClip("bspPartition",666666);
 }
 function f_BSPHitTest(x1,y1,x2,y2) {
   bspWorkingLine.x1 = x1;
@@ -652,7 +652,7 @@ function f_SelectLine(zone,center) {
   // draw partition line
   var temp = p_game.bspPartition;
   temp.clear();
-  temp.lineStyle(1,0x00ff00,100,undefined,undefined,"none");
+  temp.lineStyle(1,0xffff00,100,undefined,undefined,"none");
   var x1 = bsp[zone.index + 1];
   var y1 = bsp[zone.index + 2];
   var x2 = bsp[zone.index + 3];
@@ -672,6 +672,18 @@ function f_SelectLine(zone,center) {
   if(center) {
     f_CenterGame(mX,mY);
   }
+  // draw arrow indicating front
+  temp.lineStyle(1.5,0xffff00,100,undefined,undefined,"none");
+  var arrowLen = 12;
+  var frontX = mX + (- dY) * arrowLen;
+  var frontY = mY + dX * arrowLen;
+  temp.moveTo(mX,mY);
+  temp.lineTo(frontX,frontY);
+  var headLen = 6;
+  var angle = Math.atan2(dX,- dY);
+  temp.lineTo(frontX - headLen * Math.cos(angle - 0.5),frontY - headLen * Math.sin(angle - 0.5));
+  temp.moveTo(frontX,frontY);
+  temp.lineTo(frontX - headLen * Math.cos(angle + 0.5),frontY - headLen * Math.sin(angle + 0.5));
   txtLine1.txt.text = "line #" + (zone.index / bspStructSize) + ":";
   txtLine1.txtBG.text = txtLine1.txt.text;
   txtLine2.txt.text = "pos1=(" + bsp[zone.index + 1] + "," + bsp[zone.index + 2] + ")";

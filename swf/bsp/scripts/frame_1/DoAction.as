@@ -256,11 +256,14 @@ function f_BuildLineList() {
       line.x2 = point.x;
       line.y2 = point.y - offset;
       line.type = temp.n_type;
+      // skip tightening, for single lines (exit, function, etc)
+      line.noTighten = temp.noTighten;
+
       lineList.push(line);
       offset += 0.001;
     }
     if(temp.trailnode) {
-      wp = new waypoint();
+      var wp = new waypoint();
       point.x = 0;
       point.y = 0;
       f_LocalToGame(temp.trailnode,point);
@@ -275,6 +278,9 @@ function f_TightenUpLineList() {
   var len = lineList.length;
   for(var i = 0; i < len; i++) {
     var line = lineList[i];
+    if(line.noTighten) {
+      continue;
+    }
     if(!line.one) {
       var minDist = 999999.9;
       var minIndex = -1;
@@ -282,6 +288,9 @@ function f_TightenUpLineList() {
       for(var j = 0; j < len; j++) {
         if(i != j) {
           var line2 = lineList[j];
+          if(line2.noTighten) {
+            continue;
+          }
           if(!line2.one) {
             var dist = f_QuickDist(line.x1,line.y1,line2.x1,line2.y1);
             if(dist < minDist) {
@@ -327,6 +336,9 @@ function f_TightenUpLineList() {
       for(var j = 0; j < len; j++) {
         if(i != j) {
           var line2 = lineList[j];
+          if(line2.noTighten) {
+            continue;
+          }
           if(!line2.one) {
             var dist = f_QuickDist(line.x2,line.y2,line2.x1,line2.y1);
             if(dist < minDist) {

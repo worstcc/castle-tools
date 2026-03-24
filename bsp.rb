@@ -11,7 +11,6 @@ OptionParser.new do |opts|
   opts.on('-nNAME','--name NAME',String,'name of pak file') { |name| options[:name] = name }
   opts.on('-u','--unbalanced',"don't balance bsp") { options[:unbalanced] = true }
   opts.on('-a','--auto','automatically close bsp viewer') { options[:auto] = true }
-  opts.on('-v','--verbose','show bsp creation progress') { options[:verbose] = true }
   opts.on('--blank','create a blank bsp (useful for level development)') { options[:blank] = true }
 end.parse!
 
@@ -68,10 +67,23 @@ else
   # get bsp data from bsp.swf
   parameters = ['--scale','show-all','--no-gui','--filesystem-access-mode','allow',"-PinputLevel=#{inputFile}"]
   parameters << '-Pauto=true' if options[:auto]
-  parameters << '-Pverbose=true' if options[:verbose]
   parameters << '-PbalancedBSP=false' if options[:unbalanced]
   bspData = []
   inBspBlock = false
+
+  steps = [
+    ['tightening lines'],
+    ['building bsp tree','finding best partition line']
+  ]
+  stepToGroup = {}
+  steps.each do |g|
+    g.each { |step| stepToGroup[step] = g.first }
+  end
+  stepPattern = Regexp.union(stepToGroup.keys)
+
+  width = 0
+  currentGroup = nil
+  groupProgress = Hash.new { |h,k| h[k] = {} }
   IO.popen([ruffle,*parameters,bspSwf.to_s],'r') do |io|
     io.each_line do |line|
       # clean line ansi
@@ -86,11 +98,44 @@ else
       if inBspBlock
         bspData << line
         break if line.include?('===bspend===')
+
+        next
       end
 
-      puts line unless inBspBlock
+      # show progress, one line for each step
+      if line =~ %r{(#{stepPattern}) \((\d+)/(\d+)\) \((\d+)%\)}
+        step = Regexp.last_match(1)
+        current = Regexp.last_match(2)
+        total = Regexp.last_match(3)
+        percent = Regexp.last_match(4)
+        group = stepToGroup[step]
+        groupProgress[group][step] = "#{current}/#{total} (#{percent}%)"
+      elsif line =~ /(#{stepPattern}) \((\d+)%\)/
+        step = Regexp.last_match(1)
+        percent = Regexp.last_match(2)
+        group = stepToGroup[step]
+        groupProgress[group][step] = "#{percent}%"
+      else
+        puts line
+        next
+      end
+
+      # group changed, insert newline
+      if currentGroup && group != currentGroup
+        print "\n"
+        width = 0
+      end
+      currentGroup = group
+
+      parts = groupProgress[group].map { |s,v| "#{s}: #{v}" }
+      output = parts.join(' | ')
+      width = [width,output.length].max
+
+      print "\r#{output.ljust(width)}"
+      $stdout.flush
     end
   end
+  print "\n"
   abort 'error: bsp data not found in ruffle output (closed too early?)' if bspData == []
   # puts bspData
 end

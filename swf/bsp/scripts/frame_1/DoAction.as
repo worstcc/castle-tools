@@ -1,3 +1,4 @@
+// contains progress tracing, unused as it makes ruffle use up gigabytes of memory quickly
 function f_ClassifyLine(partition,line) {
   var v1 = new vector2d();
   var v2 = new vector2d();
@@ -39,10 +40,8 @@ function f_SplitLine(apartition,aline,aline2) {
   aline2.y1 = newY;
 }
 function f_BuildBSPTree(node,list) {
-  buildBspTreeCalls++;
-  if(verbose) {
-    trace("building bsp tree (" + Math.round((buildBspTreeCalls * (100 / buildBspTreeSize))) + "%)");
-  }
+  progressCurrent++;
+  f_TraceProgress("building bsp tree",progressCurrent,progressTotal);
   var frontList = new Array();
   var backList = new Array();
   if(balancedBSP) {
@@ -63,14 +62,14 @@ function f_BuildBSPTree(node,list) {
         f_SplitLine(partition,line,line2);
         frontList.push(line);
         backList.push(line2);
-        buildBspTreeSize++;
+        progressTotal++;
         break;
       case 4:
         var line2 = new lineSegment();
         f_SplitLine(partition,line,line2);
         backList.push(line);
         frontList.push(line2);
-        buildBspTreeSize++;
+        progressTotal++;
         break;
       case 0:
     }
@@ -92,6 +91,8 @@ function f_ChooseBestPartitionLine(list) {
     trace("f_ChooseBestPartitionLine");
     return;
   }
+  progress2Current = 0;
+  progress2Total = 0;
   var bestLine;
   var bestIndex = 0;
   var minRelation = 1;
@@ -99,7 +100,10 @@ function f_ChooseBestPartitionLine(list) {
   var bestRelation = 0;
   while(!bestLine && minRelation >= 0.01) {
     var len = list.length;
+    progress2Total += len;
     for(var i = 0; i < len; i++) {
+      progress2Current++;
+      f_TraceProgress("finding best partition line",progress2Current,progress2Total);
       var line1 = list[i];
       var numPositive = 0;
       var numNegative = 0;
@@ -164,11 +168,9 @@ function f_InitLevelBSP() {
   f_BuildLineList();
   bspRoot = new bspTreeNode();
   if(lineList.length) {
-    buildBspTreeSize = lineList.length;
-    buildBspTreeCalls = 0;
-    var oldT = getTimer();
+    progressCurrent = 0;
+    progressTotal = lineList.length;
     f_BuildBSPTree(bspRoot,lineList);
-    buildBspTreeTime = getTimer() - oldT;
     f_ConvertBSPtoArray(bspRoot);
     f_ConvertWaypointstoArray();
     f_DrawBsp();
@@ -252,7 +254,7 @@ function f_QuickDist(x,y,xx,yy) {
 function f_BuildLineList() {
   var offset = 0.001;
   var point = new Object();
-  for(n in p_game) {
+  for(var n in p_game) {
     var temp = p_game[n];
     if(temp.bsp1) {
       var line = new lineSegment();
@@ -285,7 +287,11 @@ function f_BuildLineList() {
       waypoints.push(wp);
     }
   }
-  // f_DrawCircle(-69,-53,100,500,offset);
+  // for(var i = 0; i < 1; i++) {
+  //   offset = f_DrawCircle(-69 + i * 300,-53,100,100,offset);
+  // }
+  progressCurrent = 0;
+  progressTotal = lineList.length;
   f_TightenUpLineList();
 }
 function f_DrawCircle(x,y,r,lines,offset) {
@@ -301,10 +307,13 @@ function f_DrawCircle(x,y,r,lines,offset) {
     lineList.push(temp);
     offset += 0.001;
   }
+  return offset;
 }
 function f_TightenUpLineList() {
   var len = lineList.length;
   for(var i = 0; i < len; i++) {
+    progressCurrent++;
+    f_TraceProgress("tightening lines",progressCurrent,progressTotal);
     var line = lineList[i];
     if(line.noTighten) {
       continue;
@@ -830,6 +839,9 @@ function f_Popup(temp,error) {
     onEnterFrame = f_Quit;
   }
 }
+function f_TraceProgress(name,current,total) {
+  trace(name + " (" + current + "/" + total + ") (" + Math.round((current * (100 / total))) + "%)");
+}
 function f_CheckPress(temp) {
   if(Key.isDown(temp)) {
     if(!this["pressed" + temp]) {
@@ -1096,13 +1108,6 @@ switch(auto) {
     break;
   default:
     auto = false;
-}
-switch(verbose) {
-  case "true":
-    verbose = true;
-    break;
-  default:
-    verbose = false;
 }
 popup.txt1.selectable = popup.txt1.selectable = false;
 txtPos.txt.text = txtPos.txtBG.text = "";

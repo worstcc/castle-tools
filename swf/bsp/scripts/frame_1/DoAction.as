@@ -275,7 +275,22 @@ function f_BuildLineList() {
       waypoints.push(wp);
     }
   }
+  // f_DrawCircle(-69,-53,100,500,offset);
   f_TightenUpLineList();
+}
+function f_DrawCircle(x,y,r,lines,offset) {
+  for(var i = 0; i < lines; i++) {
+    var angle1 = (i / lines) * 2 * Math.PI;
+    var angle2 = ((i + 1) / lines) * 2 * Math.PI;
+    var temp = new lineSegment();
+    temp.x1 = (x - offset) + r * Math.cos(angle1);
+    temp.y1 = y + r * Math.sin(angle1);
+    temp.x2 = x + r * Math.cos(angle1);
+    temp.y2 = (y - offset) + r * Math.sin(angle2);
+    temp.type = 2;
+    lineList.push(temp);
+    offset += 0.001;
+  }
 }
 function f_TightenUpLineList() {
   var len = lineList.length;
@@ -940,6 +955,8 @@ function f_Load() {
           isDragging = false;
         };
         this.onEnterFrame = f_Main;
+        delete state;
+        return;
       }
   }
   state++;

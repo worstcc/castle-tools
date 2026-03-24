@@ -880,6 +880,10 @@ function f_Load() {
       } else if(loader._totalframes == 1) {
         f_Popup("error: level only has one frame",true);
       } else {
+        // no movie is loaded
+        if(loader.getBytesTotal() == -1) {
+          f_Popup("error: no level is loaded",true);
+        }
         return;
       }
       f_Popup("creating bsp...");

@@ -102,9 +102,9 @@ bspData.each do |line|
   when /^\#\d+=\[.+\]$/
     content = line.match(/\[(.+)\]/)[1]
     values = content.split(',').map(&:to_f)
-    values[6] = values[6] * 8 unless values[6].negative?
-    values[7] = values[7] * 8 unless values[7].negative?
     if mode == :lines
+      values[6] = values[6] * 8 unless values[6].negative?
+      values[7] = values[7] * 8 unless values[7].negative?
       lineData.concat(values[0..7])
     elsif mode == :waypoints
       waypointData.concat(values[0..2])

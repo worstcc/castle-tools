@@ -41,8 +41,11 @@ function f_SplitLine(apartition,aline,aline2) {
 function f_BuildBSPTree(node,list) {
   var frontList = new Array();
   var backList = new Array();
-  var partition = f_ChooseBestPartitionLine(list);
-  // var partition = list.pop();
+  if(balancedBSP) {
+    var partition = f_ChooseBestPartitionLine(list);
+  } else {
+    var partition = list.pop();
+  }
   node.partition.copy(partition);
   node.partition.type = partition.type;
   while(list.length > 0) {
@@ -1043,6 +1046,14 @@ function f_Main() {
   }
   f_Quit();
 }
+switch(balancedBSP) {
+  case "false":
+    balancedBSP = false;
+    break;
+  case "true":
+  default:
+    balancedBSP = true;
+}
 popup.txt1.selectable = popup.txt1.selectable = false;
 txtPos.txt.text = txtPos.txtBG.text = "";
 txtPos.txt.selectable = txtPos.txtBG.selectable = false;
@@ -1082,5 +1093,5 @@ for(var i = 1; this["txtHelp" + i]; i++) {
 f_Popup("loading level...");
 _quality = "high";
 state = 0;
-onEnterFrame = f_Load;
 loadMovie(inputLevel,loader);
+onEnterFrame = f_Load;

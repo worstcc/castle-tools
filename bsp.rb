@@ -9,6 +9,7 @@ OptionParser.new do |opts|
   opts.banner = "usage: #{File.basename($PROGRAM_NAME)} [options] [input swf] [outdir]"
   opts.on('-b','--brec','use brec format (xbla/ps3)') { options[:brec] = true }
   opts.on('-nNAME','--name NAME',String,'name of pak file') { |name| options[:name] = name }
+  opts.on('-u','--unbalanced',"don't balance bsp") { options[:unbalanced] = true }
   opts.on('-a','--auto','automatically close bsp viewer') { options[:auto] = true }
   opts.on('--blank','create a blank bsp (useful for level development)') { options[:blank] = true }
 end.parse!
@@ -61,6 +62,7 @@ else
   # get bsp data from running bsp.swf
   parameters = ['--scale','show-all','--no-gui','--filesystem-access-mode','allow',"-PinputLevel=#{swf}"]
   parameters << '-Pauto=true' if options[:auto]
+  parameters << '-PbalancedBSP=false' if options[:unbalanced]
   output,_stderr,_status = Open3.capture3(ruffle,*parameters,bspSwf.to_s)
   # process ruffle output
   bspData = []

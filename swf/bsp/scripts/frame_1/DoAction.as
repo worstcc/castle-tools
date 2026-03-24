@@ -1093,12 +1093,14 @@ switch(balancedBSP) {
 switch(auto) {
   case "true":
     auto = true;
+    break;
   default:
     auto = false;
 }
 switch(verbose) {
   case "true":
     verbose = true;
+    break;
   default:
     verbose = false;
 }

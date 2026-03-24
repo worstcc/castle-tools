@@ -34,7 +34,9 @@ File.open(pdag,'rb') do |f|
                data.unpack('e8')
              end
 
-    puts "##{i * 8}=[#{values[0].to_i},#{format('%.15g',values[1])},#{format('%.15g',values[2])},#{format('%.15g',values[3])},#{format('%.15g',values[4])},#{values[5].to_i},#{values[6].to_i},#{values[7].to_i}]"
+    values[6] = values[6] / 8 unless values[6].negative?
+    values[7] = values[7] / 8 unless values[7].negative?
+    puts "##{i}=[#{values[0].to_i},#{format('%.15g',values[1])},#{format('%.15g',values[2])},#{format('%.15g',values[3])},#{format('%.15g',values[4])},#{values[5].to_i},#{values[6].to_i},#{values[7].to_i}]"
   end
 
   # get waypoints

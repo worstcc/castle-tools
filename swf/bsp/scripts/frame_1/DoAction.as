@@ -166,7 +166,7 @@ function f_InitLevelBSP() {
     f_Popup("error: no lines found",true);
     return false;
   }
-  f_PrintBSPData();
+  f_PrintBspData();
   if(auto == "true") {
     fscommand("quit");
   }
@@ -564,7 +564,7 @@ function f_CheckLineHit(index) {
   }
   return ret2;
 }
-function f_PrintBSPData() {
+function f_PrintBspData() {
   if(!bsp.length && !sortedWaypoints.length) {
     return;
   }
@@ -573,11 +573,17 @@ function f_PrintBSPData() {
     trace("==lines==");
     var len = bsp.length;
     for(var i = 0; i < len; i += bspStructSize) {
+      // print line indexes divided by struct size for readability
       var temp = new Array();
       for(var j = i; j < i + bspStructSize; j++) {
-        temp.push(bsp[j]);
+        var val = bsp[j];
+        if((j == i + 6 || j == i + 7) && val != -1) {
+          val /= bspStructSize;
+        }
+        temp.push(val);
       }
-      trace("#" + i + "=[" + temp + "]");
+
+      trace("#" + (i / bspStructSize) + "=[" + temp + "]");
     }
   }
   if(sortedWaypoints.length) {

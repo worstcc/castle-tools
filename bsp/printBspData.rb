@@ -40,22 +40,20 @@ File.open(pdag,'rb') do |f|
   end
 
   # get waypoints
-  f.seek(-4,IO::SEEK_CUR)
   numWaypoints = 0
   loop do
-    data = f.read(16)
+    data = f.read(12)
     values = if brec
                data.unpack('g4')
              else
                data.unpack('e4')
              end
-    break if values[0].zero? && values[1].zero?
+    break if values[0].zero? && values[1].zero? && values[2].zero?
 
     puts '==waypoints==' if numWaypoints.zero?
 
-    puts "##{numWaypoints}=[#{format('%.15g',values[1])},#{format('%.15g',values[2])},#{values[3].to_i}]"
+    puts "##{numWaypoints}=[#{format('%.15g',values[0])},#{format('%.15g',values[1])},#{values[2].to_i}]"
     numWaypoints += 1
-    f.seek(-4,IO::SEEK_CUR)
   end
   puts '===bspend==='
 end

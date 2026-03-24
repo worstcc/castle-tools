@@ -39,6 +39,10 @@ function f_SplitLine(apartition,aline,aline2) {
   aline2.y1 = newY;
 }
 function f_BuildBSPTree(node,list) {
+  buildBspTreeCalls++;
+  if(verbose) {
+    trace("building bsp tree (" + Math.round((buildBspTreeCalls * (100 / buildBspTreeSize))) + "%)");
+  }
   var frontList = new Array();
   var backList = new Array();
   if(balancedBSP) {
@@ -59,12 +63,14 @@ function f_BuildBSPTree(node,list) {
         f_SplitLine(partition,line,line2);
         frontList.push(line);
         backList.push(line2);
+        buildBspTreeSize++;
         break;
       case 4:
         var line2 = new lineSegment();
         f_SplitLine(partition,line,line2);
         backList.push(line);
         frontList.push(line2);
+        buildBspTreeSize++;
         break;
       case 0:
     }
@@ -158,7 +164,11 @@ function f_InitLevelBSP() {
   f_BuildLineList();
   bspRoot = new bspTreeNode();
   if(lineList.length) {
+    buildBspTreeSize = lineList.length;
+    buildBspTreeCalls = 0;
+    var oldT = getTimer();
     f_BuildBSPTree(bspRoot,lineList);
+    buildBspTreeTime = getTimer() - oldT;
     f_ConvertBSPtoArray(bspRoot);
     f_ConvertWaypointstoArray();
     f_DrawBsp();
@@ -167,7 +177,7 @@ function f_InitLevelBSP() {
     return false;
   }
   f_PrintBspData();
-  if(auto == "true") {
+  if(auto) {
     fscommand("quit");
   }
   return true;
@@ -287,7 +297,7 @@ function f_DrawCircle(x,y,r,lines,offset) {
     temp.y1 = y + r * Math.sin(angle1);
     temp.x2 = x + r * Math.cos(angle1);
     temp.y2 = (y - offset) + r * Math.sin(angle2);
-    temp.type = 2;
+    temp.type = 1;
     lineList.push(temp);
     offset += 0.001;
   }
@@ -1077,9 +1087,20 @@ switch(balancedBSP) {
   case "false":
     balancedBSP = false;
     break;
-  case "true":
   default:
     balancedBSP = true;
+}
+switch(auto) {
+  case "true":
+    auto = true;
+  default:
+    auto = false;
+}
+switch(verbose) {
+  case "true":
+    verbose = true;
+  default:
+    verbose = false;
 }
 popup.txt1.selectable = popup.txt1.selectable = false;
 txtPos.txt.text = txtPos.txtBG.text = "";

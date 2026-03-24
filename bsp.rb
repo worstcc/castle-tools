@@ -11,6 +11,7 @@ OptionParser.new do |opts|
   opts.on('-nNAME','--name NAME',String,'name of pak file') { |name| options[:name] = name }
   opts.on('-u','--unbalanced',"don't balance bsp") { options[:unbalanced] = true }
   opts.on('-a','--auto','automatically close bsp viewer') { options[:auto] = true }
+  opts.on('-v','--verbose','show bsp creation progress') { options[:verbose] = true }
   opts.on('--blank','create a blank bsp (useful for level development)') { options[:blank] = true }
 end.parse!
 
@@ -67,6 +68,7 @@ else
   # get bsp data from bsp.swf
   parameters = ['--scale','show-all','--no-gui','--filesystem-access-mode','allow',"-PinputLevel=#{inputFile}"]
   parameters << '-Pauto=true' if options[:auto]
+  parameters << '-Pverbose=true' if options[:verbose]
   parameters << '-PbalancedBSP=false' if options[:unbalanced]
   bspData = []
   inBspBlock = false

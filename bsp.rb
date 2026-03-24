@@ -64,26 +64,33 @@ elsif isTxt
   # manual bsp import
   bspData = File.read(inputFile).split("\n")
 else
-  # get bsp data from running bsp.swf
+  # get bsp data from bsp.swf
   parameters = ['--scale','show-all','--no-gui','--filesystem-access-mode','allow',"-PinputLevel=#{inputFile}"]
   parameters << '-Pauto=true' if options[:auto]
   parameters << '-PbalancedBSP=false' if options[:unbalanced]
-  output,_stderr,_status = Open3.capture3(ruffle,*parameters,bspSwf.to_s)
-  # process ruffle output
   bspData = []
   inBspBlock = false
-  output.each_line do |line|
-    # clean line ansi
-    line = line.gsub(/\e\[[\d;]*m/,'')
+  IO.popen([ruffle,*parameters,bspSwf.to_s],'r') do |io|
+    io.each_line do |line|
+      # clean line ansi
+      line = line.gsub(/\e\[[\d;]*m/,'')
 
-    inBspBlock = true if line.include?('===bspstart===')
+      next unless line.include?('avm_trace: ')
 
-    if inBspBlock
-      bspData << line[line.index('avm_trace: ') + 11..] if line.include?('avm_trace: ')
-      break if line.include?('===bspend===')
+      line = line[line.index('avm_trace: ') + 11..]
+
+      inBspBlock = true if line.include?('===bspstart===')
+
+      if inBspBlock
+        bspData << line
+        break if line.include?('===bspend===')
+      end
+
+      puts line unless inBspBlock
     end
   end
   abort 'error: bsp data not found in ruffle output (closed too early?)' if bspData == []
+  # puts bspData
 end
 
 # retrieve bsp data

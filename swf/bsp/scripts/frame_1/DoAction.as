@@ -1,31 +1,58 @@
-// contains progress tracing, unused as it makes ruffle use up gigabytes of memory quickly
-function f_ClassifyLine(partition,line) {
-  var v1 = new vector2d();
-  var v2 = new vector2d();
-  v1.x = partition.x2 - partition.x1;
-  v1.y = partition.y2 - partition.y1;
-  v1.normalize();
-  v2.x = line.x1 - partition.x1;
-  v2.y = line.y1 - partition.y1;
-  v2.normalize();
-  var result1 = v1.cross(v2);
-  v2.x = line.x2 - partition.x1;
-  v2.y = line.y2 - partition.y1;
-  v2.normalize();
-  var result2 = v1.cross(v2);
-  var ret = 9;
-  if(result1 == 0 && result2 == 0) {
-    ret = 0;
-  } else if(result1 >= 0 && result2 >= 0) {
-    ret = 1;
-  } else if(result1 <= 0 && result2 <= 0) {
-    ret = 2;
-  } else if(result1 >= 0 && result2 <= 0) {
-    ret = 3;
-  } else if(result1 <= 0 && result2 >= 0) {
-    ret = 4;
+if(vanilla == "true") {
+  function f_ClassifyLine(partition,line) {
+    var v1 = new vector2d();
+    var v2 = new vector2d();
+    v1.x = partition.x2 - partition.x1;
+    v1.y = partition.y2 - partition.y1;
+    v1.normalize();
+    v2.x = line.x1 - partition.x1;
+    v2.y = line.y1 - partition.y1;
+    v2.normalize();
+    var result1 = v1.cross(v2);
+    v2.x = line.x2 - partition.x1;
+    v2.y = line.y2 - partition.y1;
+    v2.normalize();
+    var result2 = v1.cross(v2);
+    var ret = 9;
+    if(result1 == 0 && result2 == 0) {
+      ret = 0;
+    } else if(result1 >= 0 && result2 >= 0) {
+      ret = 1;
+    } else if(result1 <= 0 && result2 <= 0) {
+      ret = 2;
+    } else if(result1 >= 0 && result2 <= 0) {
+      ret = 3;
+    } else if(result1 <= 0 && result2 >= 0) {
+      ret = 4;
+    }
+    return ret;
   }
-  return ret;
+} else {
+  function f_ClassifyLine(partition,line) {
+    // not using vector2d saves a lot of memory & performance
+    var pX = partition.x1;
+    var pY = partition.y1;
+    var dX = partition.x2 - pX;
+    var dY = partition.y2 - pY;
+    var aX = line.x1 - pX;
+    var aY = line.y1 - pY;
+    var result1 = dX * aY - dY * aX;
+    var bX = line.x2 - pX;
+    var bY = line.y2 - pY;
+    var result2 = dX * bY - dY * bX;
+    if(result1 == 0 && result2 == 0) {
+      return 0;
+    } else if(result1 >= 0 && result2 >= 0) {
+      return 1;
+    } else if(result1 <= 0 && result2 <= 0) {
+      return 2;
+    } else if(result1 >= 0 && result2 <= 0) {
+      return 3;
+    } else if(result1 <= 0 && result2 >= 0) {
+      return 4;
+    }
+    return 9;
+  }
 }
 function f_SplitLine(apartition,aline,aline2) {
   aline2.x2 = aline.x2;
@@ -44,7 +71,7 @@ function f_BuildBSPTree(node,list) {
   f_TraceProgress("building bsp tree",progressCurrent,progressTotal);
   var frontList = new Array();
   var backList = new Array();
-  if(balancedBSP) {
+  if(balancedBSP == "true") {
     var partition = f_ChooseBestPartitionLine(list);
   } else {
     var partition = list.pop();
@@ -83,24 +110,89 @@ function f_BuildBSPTree(node,list) {
     f_BuildBSPTree(node.back,backList);
   }
 }
-function f_ChooseBestPartitionLine(list) {
-  if(list.length <= 2) {
-    return list.pop();
+if(vanilla == "true") {
+  function f_ChooseBestPartitionLine(list) {
+    if(list.length <= 2) {
+      return list.pop();
+    }
+    if(!list.length) {
+      trace("f_ChooseBestPartitionLine");
+      return;
+    }
+    progress2Current = 0;
+    progress2Total = 0;
+    var bestLine;
+    var bestIndex = 0;
+    var minRelation = 1;
+    var leastSplits = 9999;
+    var bestRelation = 0;
+    while(!bestLine && minRelation >= 0.01) {
+      var len = list.length;
+      progress2Total += len;
+      for(var i = 0; i < len; i++) {
+        progress2Current++;
+        f_TraceProgress("finding best partition line",progress2Current,progress2Total);
+        var line1 = list[i];
+        var numPositive = 0;
+        var numNegative = 0;
+        var numSpanning = 0;
+        for(var j = 0; j < len; j++) {
+          if(i == j) {
+            continue;
+          }
+          var line2 = list[j];
+          var result = f_ClassifyLine(line1,line2);
+          switch(result) {
+            case 1: numPositive++; break;
+            case 2: numNegative++; break;
+            case 3:
+            case 4: numSpanning++; break;
+            case 0:
+          }
+        }
+        if(numPositive < numNegative) {
+          var relation = numPositive / numNegative;
+        } else {
+          var relation = numNegative / numPositive;
+        }
+        if(relation >= minRelation && (numSpanning < leastSplits || numSpanning == leastSplits && relation > bestRelation)) {
+          bestLine = line1;
+          bestIndex = i;
+          leastSplits = numSpanning;
+          bestRelation = relation;
+        }
+      }
+      minRelation *= 0.5;
+    }
+    if(!bestLine) {
+      return list.pop();
+    }
+    list.splice(bestIndex,1);
+    return bestLine;
   }
-  if(!list.length) {
-    trace("f_ChooseBestPartitionLine");
-    return;
-  }
-  progress2Current = 0;
-  progress2Total = 0;
-  var bestLine;
-  var bestIndex = 0;
-  var minRelation = 1;
-  var leastSplits = 9999;
-  var bestRelation = 0;
-  while(!bestLine && minRelation >= 0.01) {
+} else {
+  function f_ChooseBestPartitionLine(list) {
+    // prioritizes minimal splits over balance, original function is vice versa,
+    // usually causes more depth traversal but yields less lines
+    // less aggressive splitting seems to fix out of bounds bugs in certain levels caused by walking straight through collision
+    // cache f_ClassifyLine results for noticable performance gain
+    // use two pass approach instead of a while loop for more performance gain & less memory usage
+    if(list.length <= 2) {
+      return list.pop();
+    }
+    if(!list.length) {
+      trace("f_ChooseBestPartitionLine");
+      return;
+    }
     var len = list.length;
-    progress2Total += len;
+    var cache = new Array();
+    var globalMinSplits = 999999;
+    var posArr = new Array();
+    var negArr = new Array();
+    var splitArr = new Array();
+    var splitTolerance = 1;
+    progress2Current = 0;
+    progress2Total = len;
     for(var i = 0; i < len; i++) {
       progress2Current++;
       f_TraceProgress("finding best partition line",progress2Current,progress2Total);
@@ -108,39 +200,63 @@ function f_ChooseBestPartitionLine(list) {
       var numPositive = 0;
       var numNegative = 0;
       var numSpanning = 0;
+      var row = cache[i];
+      if(!row) {
+        row = new Array();
+        cache[i] = row;
+      }
       for(var j = 0; j < len; j++) {
         if(i == j) {
           continue;
         }
-        var line2 = list[j];
-        var result = f_ClassifyLine(line1,line2);
+        var result = row[j];
+        if(result == undefined) {
+          result = f_ClassifyLine(line1,list[j]);
+          row[j] = result;
+        }
         switch(result) {
           case 1: numPositive++; break;
           case 2: numNegative++; break;
           case 3:
-          case 4: numSpanning++; break;
-          case 0:
+          case 4:
+            numSpanning++;
+        }
+        if(numSpanning > globalMinSplits + splitTolerance) {
+          break;
         }
       }
+      posArr[i] = numPositive;
+      negArr[i] = numNegative;
+      splitArr[i] = numSpanning;
+      if(numSpanning < globalMinSplits) {
+        globalMinSplits = numSpanning;
+      }
+    }
+    var bestIndex = -1;
+    var bestRelation = -1;
+    for(var i = 0; i < len; i++) {
+      if(splitArr[i] > globalMinSplits + splitTolerance) {
+        continue;
+      }
+      var numPositive = posArr[i];
+      var numNegative = negArr[i];
       if(numPositive < numNegative) {
         var relation = numPositive / numNegative;
       } else {
         var relation = numNegative / numPositive;
       }
-      if(relation >= minRelation && (numSpanning < leastSplits || numSpanning == leastSplits && relation > bestRelation)) {
-        bestLine = line1;
-        bestIndex = i;
-        leastSplits = numSpanning;
+      if(relation > bestRelation) {
         bestRelation = relation;
+        bestIndex = i;
       }
     }
-    minRelation *= 0.5;
+    if(bestIndex < 0) {
+      return list.pop();
+    }
+    var bestLine = list[bestIndex];
+    list.splice(bestIndex,1);
+    return bestLine;
   }
-  if(!bestLine) {
-    return list.pop();
-  }
-  list.splice(bestIndex,1);
-  return bestLine;
 }
 function f_InitLevelBSP() {
   loader._x = 0;
@@ -179,7 +295,7 @@ function f_InitLevelBSP() {
     return false;
   }
   f_PrintBspData();
-  if(auto) {
+  if(auto == "true") {
     fscommand("quit");
   }
   return true;
@@ -287,9 +403,7 @@ function f_BuildLineList() {
       waypoints.push(wp);
     }
   }
-  // for(var i = 0; i < 1; i++) {
-  //   offset = f_DrawCircle(-69 + i * 300,-53,100,100,offset);
-  // }
+  // f_DrawCircle(-69,-53,100,500,offset);
   progressCurrent = 0;
   progressTotal = lineList.length;
   f_TightenUpLineList();
@@ -1095,19 +1209,8 @@ function f_Main() {
   }
   f_Quit();
 }
-switch(balancedBSP) {
-  case "false":
-    balancedBSP = false;
-    break;
-  default:
-    balancedBSP = true;
-}
-switch(auto) {
-  case "true":
-    auto = true;
-    break;
-  default:
-    auto = false;
+if(balancedBSP == undefined) {
+  balancedBSP = "true";
 }
 popup.txt1.selectable = popup.txt1.selectable = false;
 txtPos.txt.text = txtPos.txtBG.text = "";

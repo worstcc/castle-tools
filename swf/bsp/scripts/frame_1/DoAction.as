@@ -67,6 +67,8 @@ function f_SplitLine(apartition,aline,aline2) {
   aline2.y1 = newY;
 }
 function f_BuildBSPTree(node,list) {
+  // inlining f_ClassifyLine/f_SplitLine calls yields very minimal gains,
+  // compared to inlining in f_ChooseBestPartitionLine
   progressCurrent++;
   f_TraceProgress("building bsp tree",progressCurrent,progressTotal);
   var frontList = new Array();
@@ -82,8 +84,12 @@ function f_BuildBSPTree(node,list) {
     var line = list.pop();
     var result = f_ClassifyLine(partition,line);
     switch(result) {
-      case 1: frontList.push(line); break;
-      case 2: backList.push(line); break;
+      case 1:
+        frontList.push(line);
+        break;
+      case 2:
+        backList.push(line);
+        break;
       case 3:
         var line2 = new lineSegment();
         f_SplitLine(partition,line,line2);
@@ -97,8 +103,6 @@ function f_BuildBSPTree(node,list) {
         backList.push(line);
         frontList.push(line2);
         progressTotal++;
-        break;
-      case 0:
     }
   }
   if(frontList.length > 0) {
@@ -177,6 +181,7 @@ if(vanilla == "true") {
     // less aggressive splitting seems to fix out of bounds bugs in certain levels caused by walking straight through collision
     // cache f_ClassifyLine results for noticable performance gain
     // use two pass approach instead of a while loop for more performance gain & less memory usage
+    // inline f_ClassifyLine helps performance/memory
     if(list.length <= 2) {
       return list.pop();
     }
@@ -197,6 +202,10 @@ if(vanilla == "true") {
       progress2Current++;
       f_TraceProgress("finding best partition line",progress2Current,progress2Total);
       var line1 = list[i];
+      var pX = line1.x1;
+      var pY = line1.y1;
+      var dX = line1.x2 - pX;
+      var dY = line1.y2 - pY;
       var numPositive = 0;
       var numNegative = 0;
       var numSpanning = 0;
@@ -211,7 +220,24 @@ if(vanilla == "true") {
         }
         var result = row[j];
         if(result == undefined) {
-          result = f_ClassifyLine(line1,list[j]);
+          var line2 = list[j];
+          var aX = line2.x1 - pX;
+          var aY = line2.y1 - pY;
+          var result1 = dX * aY - dY * aX;
+          var bX = line2.x2 - pX;
+          var bY = line2.y2 - pY;
+          var result2 = dX * bY - dY * bX;
+          if(result1 == 0 && result2 == 0) {
+            result = 0;
+          } else if(result1 >= 0 && result2 >= 0) {
+            result = 1;
+          } else if(result1 <= 0 && result2 <= 0) {
+            result = 2;
+          } else if(result1 >= 0 && result2 <= 0) {
+            result = 3;
+          } else {
+            result = 4;
+          }
           row[j] = result;
         }
         switch(result) {
@@ -370,6 +396,14 @@ function f_QuickDist(x,y,xx,yy) {
 function f_BuildLineList() {
   var offset = 0.001;
   var point = new Object();
+  // p_game.bspTemp = new Object();
+  // p_game.bspTemp.bsp1 = new Object();
+  // p_game.bspTemp.bsp1._x = 0;
+  // p_game.bspTemp.bsp1._y = 0;
+  // p_game.bspTemp.bsp2 = new Object();
+  // p_game.bspTemp.bsp2._x = -32;
+  // p_game.bspTemp.bsp2._y = 0;
+  // p_game.bspTemp.circle = true;
   for(var n in p_game) {
     var temp = p_game[n];
     if(temp.bsp1) {
@@ -436,111 +470,187 @@ function f_BuildLineList() {
   progressTotal = lineList.length;
   f_TightenUpLineList();
 }
-function f_TightenUpLineList() {
-  var len = lineList.length;
-  for(var i = 0; i < len; i++) {
-    progressCurrent++;
-    f_TraceProgress("tightening lines",progressCurrent,progressTotal);
-    var line = lineList[i];
-    if(line.noTighten) {
-      continue;
+if(vanilla == "true") {
+  function f_TightenUpLineList() {
+    var len = lineList.length;
+    for(var i = 0; i < len; i++) {
+      progressCurrent++;
+      f_TraceProgress("tightening lines",progressCurrent,progressTotal);
+      var line = lineList[i];
+      if(line.noTighten) {
+        continue;
+      }
+      if(!line.one) {
+        var minDist = 999999.9;
+        var minIndex = -1;
+        var minEnd = -1;
+        for(var j = 0; j < len; j++) {
+          if(i != j) {
+            var line2 = lineList[j];
+            if(line2.noTighten) {
+              continue;
+            }
+            if(!line2.one) {
+              var dist = f_QuickDist(line.x1,line.y1,line2.x1,line2.y1);
+              if(dist < minDist) {
+                minDist = dist;
+                minIndex = j;
+                minEnd = 1;
+              }
+            }
+            if(!line2.two) {
+              var dist = f_QuickDist(line.x1,line.y1,line2.x2,line2.y2);
+              if(dist < minDist) {
+                minDist = dist;
+                minIndex = j;
+                minEnd = 2;
+              }
+            }
+          }
+        }
+        if(minIndex >= 0) {
+          var line2 = lineList[minIndex];
+          if(minEnd == 1) {
+            var newX = (line.x1 + line2.x1) / 2;
+            var newY = (line.y1 + line2.y1) / 2;
+            line2.x1 = newX;
+            line2.y1 = newY;
+            line2.one = true;
+          } else if(minEnd == 2) {
+            var newX = (line.x1 + line2.x2) / 2;
+            var newY = (line.y1 + line2.y2) / 2;
+            line2.x2 = newX;
+            line2.y2 = newY;
+            line2.two = true;
+          }
+          line.x1 = newX;
+          line.y1 = newY;
+          line.one = true;
+        }
+      }
+      if(!line.two) {
+        var minDist = 999999.9;
+        var minIndex = -1;
+        var minEnd = -1;
+        for(var j = 0; j < len; j++) {
+          if(i != j) {
+            var line2 = lineList[j];
+            if(line2.noTighten) {
+              continue;
+            }
+            if(!line2.one) {
+              var dist = f_QuickDist(line.x2,line.y2,line2.x1,line2.y1);
+              if(dist < minDist) {
+                minDist = dist;
+                minIndex = j;
+                minEnd = 1;
+              }
+            }
+            if(!line2.two) {
+              var dist = f_QuickDist(line.x2,line.y2,line2.x2,line2.y2);
+              if(dist < minDist) {
+                minDist = dist;
+                minIndex = j;
+                minEnd = 2;
+              }
+            }
+          }
+        }
+        if(minIndex >= 0) {
+          var line2 = lineList[minIndex];
+          if(minEnd == 1) {
+            var newX = (line.x2 + line2.x1) / 2;
+            var newY = (line.y2 + line2.y1) / 2;
+            line2.x1 = newX;
+            line2.y1 = newY;
+            line2.one = true;
+          } else if(minEnd == 2) {
+            var newX = (line.x2 + line2.x2) / 2;
+            var newY = (line.y2 + line2.y2) / 2;
+            line2.x2 = newX;
+            line2.y2 = newY;
+            line2.two = true;
+          }
+          line.x2 = newX;
+          line.y2 = newY;
+          line.two = true;
+        }
+      }
     }
-    if(!line.one) {
-      var minDist = 999999.9;
-      var minIndex = -1;
-      var minEnd = -1;
-      for(var j = 0; j < len; j++) {
-        if(i != j) {
-          var line2 = lineList[j];
-          if(line2.noTighten) {
-            continue;
-          }
-          if(!line2.one) {
-            var dist = f_QuickDist(line.x1,line.y1,line2.x1,line2.y1);
-            if(dist < minDist) {
-              minDist = dist;
-              minIndex = j;
-              minEnd = 1;
-            }
-          }
-          if(!line2.two) {
-            var dist = f_QuickDist(line.x1,line.y1,line2.x2,line2.y2);
-            if(dist < minDist) {
-              minDist = dist;
-              minIndex = j;
-              minEnd = 2;
-            }
-          }
+  }
+} else {
+  function f_TightenUpLineList() {
+    // split repeating logic into seperate function
+    // not using f_QuickDist helps performance/memory
+    var len = lineList.length;
+    for(var i = 0; i < len; i++) {
+      progressCurrent++;
+      f_TraceProgress("tightening lines",progressCurrent,progressTotal);
+      var line = lineList[i];
+      if(line.noTighten) {
+        continue;
+      }
+      f_TightenUpLineListProcessEndpoint(line,"one","x1","y1",i);
+      f_TightenUpLineListProcessEndpoint(line,"two","x2","y2",i);
+    }
+  }
+  function f_TightenUpLineListProcessEndpoint(line,type,xKey,yKey,i) {
+    if(line[type]) {
+      return;
+    }
+    var x = line[xKey];
+    var y = line[yKey];
+    var minDist = 999999.9;
+    var minLine;
+    var minEnd = 0;
+    var len = lineList.length;
+    for(var j = 0; j < len; j++) {
+      if(j == i) {
+        continue;
+      }
+      var line2 = lineList[j];
+      if(line2.noTighten) {
+        continue;
+      }
+      if(!line2.one) {
+        var dX = x - line2.x1;
+        var dY = y - line2.y1;
+        var dist = dX * dX + dY * dY;
+        if(dist < minDist) {
+          minDist = dist;
+          minLine = line2;
+          minEnd = 1;
         }
       }
-      if(minIndex >= 0) {
-        var line2 = lineList[minIndex];
-        if(minEnd == 1) {
-          var newX = (line.x1 + line2.x1) / 2;
-          var newY = (line.y1 + line2.y1) / 2;
-          line2.x1 = newX;
-          line2.y1 = newY;
-          line2.one = true;
-        } else if(minEnd == 2) {
-          var newX = (line.x1 + line2.x2) / 2;
-          var newY = (line.y1 + line2.y2) / 2;
-          line2.x2 = newX;
-          line2.y2 = newY;
-          line2.two = true;
+      if(!line2.two) {
+        var dX = x - line2.x2;
+        var dY = y - line2.y2;
+        var dist = dX * dX + dY * dY;
+        if(dist < minDist) {
+          minDist = dist;
+          minLine = line2;
+          minEnd = 2;
         }
-        line.x1 = newX;
-        line.y1 = newY;
-        line.one = true;
       }
     }
-    if(!line.two) {
-      var minDist = 999999.9;
-      var minIndex = -1;
-      var minEnd = -1;
-      for(var j = 0; j < len; j++) {
-        if(i != j) {
-          var line2 = lineList[j];
-          if(line2.noTighten) {
-            continue;
-          }
-          if(!line2.one) {
-            var dist = f_QuickDist(line.x2,line.y2,line2.x1,line2.y1);
-            if(dist < minDist) {
-              minDist = dist;
-              minIndex = j;
-              minEnd = 1;
-            }
-          }
-          if(!line2.two) {
-            var dist = f_QuickDist(line.x2,line.y2,line2.x2,line2.y2);
-            if(dist < minDist) {
-              minDist = dist;
-              minIndex = j;
-              minEnd = 2;
-            }
-          }
-        }
-      }
-      if(minIndex >= 0) {
-        var line2 = lineList[minIndex];
-        if(minEnd == 1) {
-          var newX = (line.x2 + line2.x1) / 2;
-          var newY = (line.y2 + line2.y1) / 2;
-          line2.x1 = newX;
-          line2.y1 = newY;
-          line2.one = true;
-        } else if(minEnd == 2) {
-          var newX = (line.x2 + line2.x2) / 2;
-          var newY = (line.y2 + line2.y2) / 2;
-          line2.x2 = newX;
-          line2.y2 = newY;
-          line2.two = true;
-        }
-        line.x2 = newX;
-        line.y2 = newY;
-        line.two = true;
+    if(minLine) {
+      if(minEnd == 1) {
+        var newX = (x + minLine.x1) / 2;
+        var newY = (y + minLine.y1) / 2;
+        minLine.x1 = newX;
+        minLine.y1 = newY;
+        minLine.one = true;
+      } else if(minEnd == 2) {
+        var newX = (x + minLine.x2) / 2;
+        var newY = (y + minLine.y2) / 2;
+        minLine.x2 = newX;
+        minLine.y2 = newY;
+        minLine.two = true;
       }
     }
+    line[xKey] = newX;
+    line[yKey] = newY;
+    line[type] = true;
   }
 }
 function f_LocalToGame(zone,point) {
@@ -835,6 +945,7 @@ function f_FormatDecimal(n) {
 }
 function f_StopSprites(zone,visited) {
   // recursively stop animations in a sprite
+  // takes a lot of memory & time
   if(!visited) {
     visited = new Array();
   }
@@ -1040,7 +1151,7 @@ function f_Load() {
           return;
         }
         p_game.gotoAndStop(2);
-        f_StopSprites(loader);
+        // f_StopSprites(loader);
         // hide non-game objects
         for(var temp in loader) {
           if(loader[temp]._name != "game" && typeof(loader[temp]) == "movieclip") {

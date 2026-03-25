@@ -373,25 +373,54 @@ function f_BuildLineList() {
   for(var n in p_game) {
     var temp = p_game[n];
     if(temp.bsp1) {
-      var line = new lineSegment();
-      line.one;
-      line.two;
-      point.x = 0;
-      point.y = 0;
-      f_LocalToGame(temp.bsp1,point);
-      line.x1 = point.x - offset;
-      line.y1 = point.y;
-      point.x = 0;
-      point.y = 0;
-      f_LocalToGame(temp.bsp2,point);
-      line.x2 = point.x;
-      line.y2 = point.y - offset;
-      line.type = temp.n_type;
-      // skip tightening, for single lines (exit, function, etc)
-      line.noTighten = temp.noTighten;
+      if(temp.circle) {
+        var cX = temp.bsp1._x;
+        var cY = temp.bsp1._y;
+        var r = Math.abs(temp.bsp2._x - cX);
+        var lines = 35;
+        for(var i = 0; i < lines; i++) {
+          var t1 = (i / lines) * 2 * Math.PI;
+          var t2 = ((i + 1) / lines) * 2 * Math.PI;
+          var p1 = new Object();
+          p1.x = (cX - offset) + r * Math.cos(t1);
+          p1.y = cY + r * Math.sin(t1);
+          f_LocalToGame(temp,p1);
+          var p2 = new Object()
+          p2.x = cX + r * Math.cos(t2);
+          p2.y = (cY - offset) + r * Math.sin(t2);
+          f_LocalToGame(temp,p2);
+          var temp2 = new lineSegment();
+          temp2.one;
+          temp2.two;
+          temp2.x1 = p1.x;
+          temp2.y1 = p1.y;
+          temp2.x2 = p2.x;
+          temp2.y2 = p2.y;
+          temp2.type = temp.n_type;
+          lineList.push(temp2);
+          offset += 0.001;
+        }
+      } else {
+        var line = new lineSegment();
+        line.one;
+        line.two;
+        point.x = 0;
+        point.y = 0;
+        f_LocalToGame(temp.bsp1,point);
+        line.x1 = point.x - offset;
+        line.y1 = point.y;
+        point.x = 0;
+        point.y = 0;
+        f_LocalToGame(temp.bsp2,point);
+        line.x2 = point.x;
+        line.y2 = point.y - offset;
+        line.type = temp.n_type;
+        // skip tightening, for single lines (exit, function, etc)
+        line.noTighten = temp.noTighten;
 
-      lineList.push(line);
-      offset += 0.001;
+        lineList.push(line);
+        offset += 0.001;
+      }
     }
     if(temp.trailnode) {
       var wp = new waypoint();
@@ -403,25 +432,9 @@ function f_BuildLineList() {
       waypoints.push(wp);
     }
   }
-  // f_DrawCircle(-69,-53,100,500,offset);
   progressCurrent = 0;
   progressTotal = lineList.length;
   f_TightenUpLineList();
-}
-function f_DrawCircle(x,y,r,lines,offset) {
-  for(var i = 0; i < lines; i++) {
-    var angle1 = (i / lines) * 2 * Math.PI;
-    var angle2 = ((i + 1) / lines) * 2 * Math.PI;
-    var temp = new lineSegment();
-    temp.x1 = (x - offset) + r * Math.cos(angle1);
-    temp.y1 = y + r * Math.sin(angle1);
-    temp.x2 = x + r * Math.cos(angle1);
-    temp.y2 = (y - offset) + r * Math.sin(angle2);
-    temp.type = 1;
-    lineList.push(temp);
-    offset += 0.001;
-  }
-  return offset;
 }
 function f_TightenUpLineList() {
   var len = lineList.length;

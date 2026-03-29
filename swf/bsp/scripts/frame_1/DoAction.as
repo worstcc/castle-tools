@@ -1158,12 +1158,12 @@ function f_Load() {
             loader[temp]._visible = false;
           }
         }
-      } else if(loader._totalframes == 1) {
-        f_Popup("error: level only has one frame",true);
       } else {
         // no movie is loaded
         if(loader.getBytesTotal() == -1) {
-          f_Popup("error: no level is loaded",true);
+          f_Popup("error: no swf is loaded",true);
+        } else if(loader.getBytesTotal() > 20 && loader.getBytesLoaded() == loader.getBytesTotal() && loader._totalframes != 3) {
+          f_Popup("error: swf is not a level file",true);
         }
         return;
       }
@@ -1375,5 +1375,9 @@ for(var i = 1; this["txtHelp" + i]; i++) {
 f_Popup("loading level...");
 _quality = "high";
 state = 0;
+inputLevel = inputLevel.split("\\").join("/");
+if(inputLevel.indexOf("file:///") != 0) {
+  inputLevel = "file:///" + inputLevel;
+}
 loadMovie(inputLevel,loader);
 onEnterFrame = f_Load;

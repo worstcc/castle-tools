@@ -231,7 +231,7 @@ else
   outputSwf = Tempfile.new(['','.swf'])
   FileUtils.cp(pixlSwf,outputSwf)
 
-  system(ffdec,'-replace',outputSwf.path,outputSwf.path,'65532',inputFile.to_s)
+  system(ffdec,'-replace',outputSwf.path,outputSwf.path,'65531',inputFile.to_s)
   # get XML for editing shape & pixl tags
   system(ffdec,'-swf2xml',outputSwf.path,swfXml.path)
   doc = Nokogiri::XML(File.read(swfXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)

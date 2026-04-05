@@ -5,88 +5,69 @@ require 'optparse'
 require 'pathname'
 
 def movePak(file,dir)
-  filename = File.basename(file)
-  if filename.include?("level")
-    dest = File.join(dir,"levels",filename)
-  elsif filename.include?("bsp")
-    dest = File.join(dir,"bsps",filename)
-  else
-    dest = File.join(dir,"game",filename)
-  end
+  fileName = File.basename(file)
+  dest = if fileName.include?('level')
+           File.join(dir,'levels',fileName)
+         elsif fileName.include?('bsp')
+           File.join(dir,'bsps',fileName)
+         else
+           File.join(dir,'game',fileName)
+         end
   FileUtils.rm(dest) if File.exist?(dest)
   FileUtils.mv(file,dest)
-  puts filename
+  puts fileName
 end
 
+def processFile(input,inputDir,gameDir,cryptRb,options)
+  if options[:brec]
+    system('ruby',cryptRb.to_s,'-eb',input,inputDir)
+  else
+    system('ruby',cryptRb.to_s,'-e',input,inputDir)
+  end
+  pak = "#{File.basename(input,'.swf').downcase}.pak"
+  movePak(pak,gameDir) if File.exist?(File.join(inputDir,pak))
+end
+
+usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [input directory] [game directory]"
 options = {}
 OptionParser.new do |opts|
-  opts.banner = "usage: compile.rb [options] $INDIR $GAMEDIR"
-  opts.on("--brec", "encrypt SWFs to BREC format (XBLA/PS3)") do
-    options[:brec] = true
-  end
-  opts.on("--skipSWF", "skip encrypting SWFs and only move existing PAK files") do
-    options[:skipSWF] = true
-  end
+  opts.banner = usage
+  opts.on('-b','--brec', 'encrypt to brec format (xbla/ps3)') { options[:brec] = true }
+  opts.on('-s','--skipSwf', 'skip encrypting to only move existing paks') { options[:skipSwf] = true }
 end.parse!
+abort usage if ARGV.length != 2
 
-if ARGV.length != 2
-  puts "usage: ccCompile.rb [options] $INDIR $GAMEDIR"
-  exit 1
-end
-
-indir = File.expand_path(ARGV[0])
-gamedir = File.expand_path(ARGV[1])
-
-unless File.directory?(gamedir)
-  raise "gamedir is not a valid directory"
-end
+input = File.expand_path(ARGV[0])
+abort "error: input '#{File.basename(input)}' not found" unless File.exist?(input) || File.directory?(input)
+gameDir = File.expand_path(ARGV[1])
+abort "error: game directory '#{File.basename(gameDir)}' not found" unless File.directory?(gameDir)
+cryptRb = File.join(__dir__,'crypt.rb')
+abort 'error: crypt.rb missing in script directory' unless File.exist?(cryptRb)
 
 # check for game directories
-# requiredDirs = %w[bsps game levels music shaders sounds]
-# relax dirs for mod directories
 requiredDirs = %w[game levels]
 missingDirs = requiredDirs.reject do |dir|
-  File.directory?(File.join(gamedir,dir))
+  File.directory?(File.join(gameDir,dir))
 end
+abort "#{File.basename(gameDir)} is not a castle data directory" unless missingDirs.empty?
 
-if ! missingDirs.empty?
-  raise "gamedir is not a castle data directory"
-end
-
-if File.file?(indir)
-  unless indir.downcase.end_with?('.swf')
-    raise "input file must be a SWF file"
+# move already present pak files
+if File.directory?(input)
+  children = Dir.glob(File.join(input,'*.pak')).reject { |file| File.directory?(file) }
+  children.each do |file|
+    movePak(file,gameDir)
   end
-  workingDir = File.dirname(indir)
-  swfFiles = [File.basename(indir)]
-elsif File.directory?(indir)
-  workingDir = indir
-  swfFiles = Dir.glob(File.join(workingDir,"*.swf")).sort_by { |f| File.size(f) }
-else
-  raise "indir is not a valid directory"
 end
 
-crypt = Pathname.new(__FILE__).dirname.join("crypt.rb")
-unless crypt.file?
-  raise "crypt.rb missing from script directory"
-end
-
-Dir.chdir(workingDir)
-
-# move already existing PAK files
-Dir.glob("*.pak").each do |file|
-  movePak(file,gamedir)
-end
-
-# get SWF files, sorted from least size to most size
-unless options[:skipSWF]
-  swfFiles.each do |file|
-    if options[:brec]
-      system("ruby", crypt.to_s, "--brec", "--encrypt", file, ".")
-    else
-      system("ruby", crypt.to_s, "--encrypt", file, ".")
+unless options[:skipSwf]
+  if File.directory?(input)
+    children = Dir.glob(File.join(input,'*.swf')).reject { |file| File.directory?(file) }
+    abort 'error: no swf files found in input directory' if children.empty?
+    children.each do |file|
+      processFile(file,input,gameDir,cryptRb,options)
     end
-    pakFile = File.basename(file, ".swf").downcase + ".pak"
-    movePak(pakFile,gamedir)
+  else
+    abort 'error: input file is not a swf' unless input.downcase.end_with?('.swf')
+    processFile(input,File.dirname(input),gameDir,cryptRb,options)
   end
 end

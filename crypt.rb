@@ -258,9 +258,7 @@ def encryptPdagBrec(inFile,outDir)
   zipFile(zipPath,archiveName,data)
 end
 
-def decryptFile(inFile, outDir)
-  abort 'error: input file is not a .pak' if File.extname(inFile) != '.pak'
-
+def decrypt(inFile, outDir)
   Zip::File.open(inFile) do |zip|
     fileList = zip.entries.map(&:name)
     isPdag = fileList.any? { |f| f.include?('PDAG') }
@@ -274,30 +272,41 @@ def decryptFile(inFile, outDir)
   end
 end
 
-options = {}
-OptionParser.new do |opts|
-  opts.banner = 'usage: crypt.rb [options]'
-  opts.on('--encrypt','encrypt the input file instead of decrypting') { options[:encrypt] = true }
-  opts.on('--brec','when using --encrypt, output to brec format (xbla/ps3)') { options[:brec] = true }
-end.parse!
-
-if ARGV.length != 2
-  puts 'usage: crypt.rb [options] $INFILE $OUTDIR'
-  exit 1
+def processFile(input,outputDir,options)
+  if options[:encrypt]
+    if input.end_with?('.pdag')
+      options[:brec] ? encryptPdagBrec(input,outputDir) : encryptPdagNrec(input,outputDir)
+    else
+      options[:brec] ? encryptBrec(input,outputDir) : encryptNrec(input,outputDir)
+    end
+  else
+    decrypt(input,outputDir)
+  end
 end
 
-inFile = ARGV[0]
-outDir = ARGV[1]
+usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [input file/directory] [output directory]"
+options = {}
+OptionParser.new do |opts|
+  opts.banner = usage
+  opts.on('-e','--encrypt','encrypt the input file/directory instead of decrypting') { options[:encrypt] = true }
+  opts.on('-b','--brec','when encrypting, output to brec format (xbla/ps3)') { options[:brec] = true }
+end.parse!
+abort usage if ARGV.length != 2
 
-abort "error: input \"#{inFile}\" not found" unless File.exist?(inFile)
-abort "error: output \"#{outDir}\" not found" unless File.directory?(outDir)
+input = File.expand_path(ARGV[0])
+abort "error: input '#{File.basename(input)}' not found" unless File.exist?(input) || File.directory?(input)
+outputDir = File.expand_path(ARGV[1])
+abort "error: output '#{File.basename(outputDir)}' not found" unless File.directory?(outputDir)
 
-if options[:encrypt]
-  if inFile.end_with?('.pdag')
-    options[:brec] ? encryptPdagBrec(inFile,outDir) : encryptPdagNrec(inFile,outDir)
-  else
-    options[:brec] ? encryptBrec(inFile,outDir) : encryptNrec(inFile,outDir)
+extensions = options[:encrypt] ? '{.swf,.pdag}' : '.pak'
+extensionsError = options[:encrypt] ? 'swf/pdag' : 'pak'
+if File.directory?(input)
+  children = Dir.glob(File.join(input,"*#{extensions}")).reject { |file| File.directory?(file) }
+  abort "error: no #{extensionsError} files found in input directory" if children.empty?
+  children.each do |file|
+    processFile(file,outputDir,options)
   end
 else
-  decryptFile(inFile,outDir)
+  abort "error: input file is not a #{extensionsError}" unless input.downcase.end_with?(*(options[:encrypt] ? ['.swf','.pdag'] : ['.pak']))
+  processFile(input,outputDir,options)
 end

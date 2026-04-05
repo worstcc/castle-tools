@@ -1,6 +1,5 @@
 #!/usr/bin/env ruby
 # todo:
-# pixl.swf structure: shape is placed by sprite which sets _visible to false, fixes in-game visual bugs caused by reference sometimes
 # specify placed dimensions for import
 # export hybrid ps3 player/fx pixl tags
 # xbla/ps3 import (big endian "PIXL")

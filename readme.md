@@ -121,8 +121,6 @@ pixl.rb [swf file] [output directory]
 ```
 convertAudio.rb [input file/directory] [output directory]
 ```
-```
-```
 
 ### Precisely place down a BSP line in JPEXS using matrix copy & paste
 ```

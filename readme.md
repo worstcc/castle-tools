@@ -1,18 +1,19 @@
 # castle-tools
 
 ## Dependencies:
-- Ruby (scripts)
-- ImageMagick (pixl tag creation)
+- Ruby
 - JPEXS (commandline operations)
+- ImageMagick (pixl tag creation)
 - Ruffle (bsp creation)
+- ffmpeg (audio conversion)
 
 ## Installation:
 Clone/download the repository, then install dependencies:
 ### Windows
-- Install Ruby (`winget install RubyInstallerTeam.RubyWithDevKit.3.4`)
+- Run winget (`winget install RubyInstallerTeam.RubyWithDevKit.3.4 Gyan.FFmpeg Microsoft.VCRedist.2010.x86`)
 - Download [ImageMagick](https://github.com/ImageMagick/ImageMagick/releases) (Show all assets -> choose Q16-HDRI-x64-dll exe), check "Install development headers for C and C++" in installer)
 ### Linux
-- Install Ruby & ImageMagick with system package manager (if on Debian-based/Mint, use [brew](https://brew.sh) to install)
+- Install Ruby, ImageMagick, & ffmpeg with system package manager (if on Debian-based/Mint, use [brew](https://brew.sh) to install)
 
 In the repository, run:
 ```
@@ -46,6 +47,10 @@ bundle install
 - Imports images to swf as pixl tags
 - Exports pixl tags from swf as images
 
+### convertAudio.rb
+- Converts audio files from common formats to xma/ima4 format
+- You will need to provide "xWMAEncode.exe" yourself and place it in the 'castle-tools' directory
+
 ### bsp directory
 - Contains files for creating custom bsp paks (info in "bspGuide.txt")
 
@@ -55,63 +60,71 @@ bundle install
 Most scripts have options which can be seen by running the script with the `--help` parameter.
 
 ## Usage examples
+On windows, place `ruby ` at the beginning of the command.
 
 ### Decrypt pak file (nrec/brec)
 ```
-./crypt.rb [pak file] [output directory]
+crypt.rb [pak file] [output directory]
 ```
 
 ### Encrypt swf file to nrec pak
 ```
-./crypt.rb --encrypt [swf file] [output directory]
+crypt.rb --encrypt [swf file] [output directory]
 ```
 
 ### Create bsp pak file using a level swf as input
 ```
-./bsp.rb --name [bsp name] [swf] [output directory]
+bsp.rb --name [bsp name] [swf] [output directory]
 ```
 
 ### Create a blank bsp pak file
 ```
-./bsp.rb --blank --name [bsp name] [output directory]
+bsp.rb --blank --name [bsp name] [output directory]
 ```
 
 ### Encrypt swf file to brec pak
 ```
-./crypt.rb --brec --encrypt [swf file] [output directory]
+crypt.rb --brec --encrypt [swf file] [output directory]
 ```
 
 ### Encrypt swf files in a directory then move the pak files to a game data directory
 ```
-./compile.rb [input directory] [game data directory]
+compile.rb [input directory] [game data directory]
 ```
 
 ### Encrypt swf files in a directory then move the pak files to a game data directory (brec)
 ```
-./compile.rb --brec [input directory] [game data directory]
+compile.rb --brec [input directory] [game data directory]
 ```
 
 ### Deobfuscate AS2 in a swf file
 ```
-./deobfuscateSwf.rb [swf file]
+deobfuscateSwf.rb [swf file]
 ```
 
 ### Reorder tag IDs, fix pixl tag/hasEndTag crashes in a swf file
 ```
-./fixSwfTags.rb [swf file]
+fixSwfTags.rb [swf file]
 ```
 
 ### Import an image to a swf file as a pixl tag
 ```
-./pixl.rb [png file] [output directory]
+pixl.rb [png file] [output directory]
 ```
 
 ### Export images from pixl tags in a swf
 ```
-./pixl.rb [swf file] [output directory]
+pixl.rb [swf file] [output directory]
+```
+
+### Convert audio files from an input file/directory to xma format
+```
+convertAudio.rb [input file/directory] [output directory]
+```
+```
 ```
 
 ### Precisely place down a BSP line in JPEXS using matrix copy & paste
 ```
-./bsp/getLineCoords.rb $X1 $Y1 $X2 $Y2
+bsp/getLineCoords.rb $X1 $Y1 $X2 $Y2
 ```

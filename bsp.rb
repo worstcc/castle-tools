@@ -49,7 +49,7 @@ else
   print 'enter bsp name: '
   name = $stdin.gets.chomp
 end
-abort 'invalid name' unless !name.empty? && name.match?(/^[a-zA-Z0-9]+$/)
+abort 'invalid name' unless !name.empty? && name.match?(/^\w+$/)
 name = name.downcase
 
 # create bsp

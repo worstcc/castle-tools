@@ -55,6 +55,10 @@ bundle install
 - Creates a 'scripts' directory for an input swf, allowing for a workflow where all scripts are edited externally
 - When using the script, swf scripts need to edited externally, edits that use jpexs will be overwritten
 
+### build.rb
+- Builds an installable mod data directory/7z archive from a directory that contains castle mod files
+- The expected source directory format is listed in the help text
+
 ### bsp directory
 - Contains files for creating custom bsp paks (info in "bspGuide.txt")
 
@@ -130,7 +134,10 @@ convertAudio.rb [input file/directory] [output directory]
 ```
 syncScripts.rb [input swf] [swf scripts directory]
 ```
+
+### Generate an installable mod from a mod source directory
 ```
+build.rb [source directory] [output directory]
 ```
 
 ### Precisely place down a BSP line in JPEXS using matrix copy & paste

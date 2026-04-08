@@ -147,7 +147,7 @@ def processBsps!
     next unless File.file?(file)
 
     File.readlines(file).each do |line|
-      next unless line =~ /f_BSPLoadLevel\("\$?(\w+)"\)/
+      next unless line =~ /f_BSPLoadLevel\("\$?([\w-]+)"\)/
 
       bspName = Regexp.last_match(1)
       next unless bspName.start_with?('c','wf') || bspExceptions.include?(bspName)

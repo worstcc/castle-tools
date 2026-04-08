@@ -340,9 +340,9 @@ def archive!(options)
   end
 end
 
-# processFonts!
-# processBsps!
-# processSwfs!(options)
+processFonts!
+processBsps!
+processSwfs!(options)
 processAudio!
 archive!(options)
 

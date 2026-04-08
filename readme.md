@@ -51,6 +51,10 @@ bundle install
 - Converts audio files from common formats to xma/ima4 format
 - You will need to provide "xWMAEncode.exe" yourself and place it in the 'castle-tools' directory
 
+### syncScripts.rb
+- Creates a 'scripts' directory for an input swf, allowing for a workflow where all scripts are edited externally
+- When using the script, swf scripts need to edited externally, edits that use jpexs will be overwritten
+
 ### bsp directory
 - Contains files for creating custom bsp paks (info in "bspGuide.txt")
 
@@ -120,6 +124,13 @@ pixl.rb [swf file] [output directory]
 ### Convert audio files from an input file/directory to xma format
 ```
 convertAudio.rb [input file/directory] [output directory]
+```
+
+### Edit swf scripts externally via a 'scripts' directory
+```
+syncScripts.rb [input swf] [swf scripts directory]
+```
+```
 ```
 
 ### Precisely place down a BSP line in JPEXS using matrix copy & paste

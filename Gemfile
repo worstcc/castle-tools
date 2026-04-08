@@ -1,7 +1,9 @@
-source "https://rubygems.org"
+source 'https://rubygems.org'
 
 ruby '>= 3.4'
 
-gem "nokogiri"
-gem "rubyzip", "~> 3.0.2"
-gem "mini_magick"
+gem 'mini_magick'
+gem 'nokogiri'
+gem 'parallel'
+gem 'rubyzip', '~> 3.0.2'
+gem 'seven-zip'

@@ -20,11 +20,11 @@ end
 
 def processFile(input,inputDir,gameDir,cryptRb,options)
   if options[:brec]
-    system('ruby',cryptRb.to_s,'-eb',input,inputDir)
+    system(RbConfig.ruby,cryptRb.to_s,'-eb',input,inputDir)
   else
-    system('ruby',cryptRb.to_s,'-e',input,inputDir)
+    system(RbConfig.ruby,cryptRb.to_s,'-e',input,inputDir)
   end
-  pak = "#{File.basename(input,'.swf').downcase}.pak"
+  pak = File.join(File.dirname(input),"#{File.basename(input,'.swf').downcase}.pak")
   movePak(pak,gameDir) if File.exist?(File.join(inputDir,pak))
 end
 

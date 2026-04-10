@@ -25,7 +25,7 @@ def processFile(input,inputDir,gameDir,cryptRb,options)
     system(RbConfig.ruby,cryptRb.to_s,'-e',input,inputDir)
   end
   pak = File.join(File.dirname(input),"#{File.basename(input,'.swf').downcase}.pak")
-  movePak(pak,gameDir) if File.exist?(File.join(inputDir,pak))
+  movePak(pak,gameDir) if File.exist?(pak)
 end
 
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [input directory] [game directory]"

@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'English'
+require 'digest'
 require 'find'
 require 'json'
 require 'optparse'
@@ -8,6 +9,8 @@ require 'parallel'
 require 'securerandom'
 require 'seven_zip_ruby'
 require 'tmpdir'
+
+# TODO: add 'build.json' file that specifies vanilla bsp whitelist, mod name, version, blacklisted public files
 
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [source directory] [output directory]"
 options = {}
@@ -49,6 +52,17 @@ CONVERTAUDIORB = File.join(__dir__,'convertAudio.rb')
 abort 'error: convertAudio.rb not found in source directory' unless File.exist?(CONVERTAUDIORB)
 XWMAENCODE = File.join(__dir__,'xWMAEncode.exe')
 abort 'error: xWMAEncode.exe not found in script directory' unless File.exist?(XWMAENCODE)
+
+def commandExists?(cmd)
+  if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
+    system('where.exe',cmd,out: File::NULL,err: File::NULL)
+  else
+    system('which',cmd,out: File::NULL,err: File::NULL)
+  end
+end
+
+abort 'error: ffmpeg is not installed' unless commandExists?('ffmpeg')
+abort 'error: wine is not installed' if RbConfig::CONFIG['host_os'] =~ /linux/ && (!commandExists?('wine') || !commandExists?('winepath'))
 
 AUDIODIR = File.join(SRCDIR,'audio')
 FONTSDIR = File.join(SRCDIR,'fonts')
@@ -199,9 +213,15 @@ def processSwfs!(options)
   FileUtils.mkdir(levelsDir)
 
   swfFiles = Dir.glob(File.join(SWFDIR,'*.swf'))
+
   return if swfFiles.empty?
 
+  # seed random based on hash of swfs combined, so the same build produces the same random values
+  swfFilesHash = Digest::SHA256.hexdigest(swfFiles.sort.map { |file| File.read(file) }.join)
+  srand(swfFilesHash.to_i)
+
   syncingMessage = nil
+  modifiedSwfs = {}
 
   swfFiles.each do |swfFile|
     swfName = File.basename(swfFile)
@@ -250,7 +270,9 @@ def processSwfs!(options)
           if nextLine =~ /"s*\$RANDOM\((\d+)\)\s*"/
             randomVal = Regexp.last_match(1).to_i
             if randomVal.positive?
-              lines[i + 1] = nextLine.gsub(/"s*\$RANDOM\((\d+)\)\s*"/) { rand(1..randomVal) }
+              temp = rand(1..randomVal)
+              puts temp
+              lines[i + 1] = nextLine.gsub(/"s*\$RANDOM\((\d+)\)\s*"/,temp.to_s)
               randomCount += 1
             else
               warn '(swf) not substituting non-positive random value'
@@ -266,6 +288,8 @@ def processSwfs!(options)
       File.write(file,modified)
       modifiedScripts[file] = original
       originalMetadata = File.read(metadataFile)
+      originalSwf = File.read(swfFile)
+      modifiedSwfs[swfFile] = originalSwf
     end
 
     if system(RbConfig.ruby,SYNCSCRIPTSRB,swfFile,scriptsDir,out: File::NULL,err: File::NULL)
@@ -292,6 +316,11 @@ def processSwfs!(options)
     pakName = File.basename(pakFile)
     outDir = pakName.include?('level') ? levelsDir : gameDir
     FileUtils.mv(pakFile,outDir)
+  end
+
+  # restore modified swfs
+  modifiedSwfs.each do |swfFile,originalContent|
+    File.write(swfFile,originalContent)
   end
 end
 

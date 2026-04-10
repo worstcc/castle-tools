@@ -124,6 +124,9 @@ end
 
 puts "#{MODINFONAME} #{MODINFOVERSION}"
 
+# get vanilla bsp whitelist
+BSPEXCEPTIONS = (buildJson && buildJson['vanillaBsps']) || []
+
 # get archive file name
 if options[:archive]
   archiveName = MODINFOVERSION.dup
@@ -169,7 +172,6 @@ def processBsps!
   puts 'creating bsps...'
 
   bspList = []
-  bspExceptions = ['bsp61'].freeze
   bspDir = File.join(DATADIR,'bsps')
 
   FileUtils.mkdir(bspDir)
@@ -182,9 +184,9 @@ def processBsps!
       next unless line =~ /f_BSPLoadLevel\("\$?([\w-]+)"\)/
 
       bspName = Regexp.last_match(1)
-      next unless bspName.start_with?('c','wf') || bspExceptions.include?(bspName)
+      next if bspName.start_with?('bsp') && !BSPEXCEPTIONS.include?(bspName)
 
-      bspList << [bspName,file]
+      bspList << [bspName,file] unless bspList.any? { |name,_| name == bspName }
     end
   end
   return if bspList.empty?

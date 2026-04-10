@@ -10,7 +10,7 @@ require 'securerandom'
 require 'seven_zip_ruby'
 require 'tmpdir'
 
-# TODO: add 'build.json' file that specifies vanilla bsp whitelist, mod name, version, blacklisted public files
+# TODO: 'build.json' specifies vanilla bsp whitelist, blacklisted public files
 
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [source directory] [output directory]"
 options = {}
@@ -33,6 +33,7 @@ OptionParser.new do |opts|
   opts.on('-a','--archive','compress archive using 7zip') { options[:archive] = true }
   opts.on('-l','--protect','when using --archive, password protect the archive') { options[:protect] = true }
   opts.on('-nNAME','--modName NAME',String,'mod name to use for archive/$MODINFO') { |name| options[:modName] = name }
+  opts.on('-vNAME','--modVersion NAME',String,'version to use for archive/$MODINFO') { |name| options[:modVersion] = name }
   opts.on('-p','--public','omit code in dev blocks, use version number over date for mod info') { options[:public] = true }
   opts.on('-f','--force','make build if data directory/archive already exists') { options[:force] = true }
 end.parse!
@@ -87,24 +88,41 @@ else
 end
 Dir.mkdir(DATADIR)
 
+buildFile = File.join(SRCDIR,'build.json')
+buildJson = nil
+buildJson = JSON.parse(File.read(buildFile)) if File.exist?(buildFile)
+
+if Dir.exist?(SWFDIR)
+  SWFFILES = Dir.glob(File.join(SWFDIR,'*.swf'))
+
+  # seed random based on hash of swfs combined, so the same build produces the same random values
+  SWFFILESHASH = Digest::SHA256.hexdigest(SWFFILES.sort.map { |file| File.read(file) }.join)
+  srand(SWFFILESHASH.to_i)
+end
+
 # get mod info
 if options[:modName]
   MODINFONAME = options[:modName]
+elsif buildJson && buildJson['name']
+  MODINFONAME = buildJson['name'].to_s.strip
 else
   warn 'mod name not specified, using \'Mod\' as the name'
   MODINFONAME = 'Mod'.freeze
 end
 if options[:public]
-  versionFile = File.join(SRCDIR,'version.txt')
-  if File.exist?(versionFile)
-    MODINFOVERSION = File.read(versionFile).strip
+  if options[:version]
+    MODINFOVERSION = options[:modVersion]
+  elsif buildJson && buildJson['version']
+    MODINFOVERSION = buildJson['version'].to_s.strip
   else
-    MODINFOVERSION = Time.now.strftime('%Y-%m-%d %H:%M:%S').to_s
-    warn 'version.txt not found in source directory, using system time as the version'
+    MODINFOVERSION = '1.0'.freeze
+    warn 'version not specified, using \'1.0\' as the version'
   end
 else
-  MODINFOVERSION = "dev #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}".freeze
+  MODINFOVERSION = "dev #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} (#{SWFFILESHASH[0...8]})".freeze
 end
+
+puts "#{MODINFONAME} #{MODINFOVERSION}"
 
 # get archive file name
 if options[:archive]
@@ -205,25 +223,17 @@ def findMetadataForSwf(swfName)
 end
 
 def processSwfs!(options)
-  return unless Dir.exist?(SWFDIR)
+  return unless SWFFILES
 
   gameDir = File.join(DATADIR,'game')
   levelsDir = File.join(DATADIR,'levels')
   FileUtils.mkdir(gameDir)
   FileUtils.mkdir(levelsDir)
 
-  swfFiles = Dir.glob(File.join(SWFDIR,'*.swf'))
-
-  return if swfFiles.empty?
-
-  # seed random based on hash of swfs combined, so the same build produces the same random values
-  swfFilesHash = Digest::SHA256.hexdigest(swfFiles.sort.map { |file| File.read(file) }.join)
-  srand(swfFilesHash.to_i)
-
   syncingMessage = nil
   modifiedSwfs = {}
 
-  swfFiles.each do |swfFile|
+  SWFFILES.each do |swfFile|
     swfName = File.basename(swfFile)
     # sync scripts
     metadataFile = findMetadataForSwf(swfName)
@@ -270,9 +280,7 @@ def processSwfs!(options)
           if nextLine =~ /"s*\$RANDOM\((\d+)\)\s*"/
             randomVal = Regexp.last_match(1).to_i
             if randomVal.positive?
-              temp = rand(1..randomVal)
-              puts temp
-              lines[i + 1] = nextLine.gsub(/"s*\$RANDOM\((\d+)\)\s*"/,temp.to_s)
+              lines[i + 1] = nextLine.gsub(/"s*\$RANDOM\((\d+)\)\s*"/,rand(1..randomVal).to_s)
               randomCount += 1
             else
               warn '(swf) not substituting non-positive random value'

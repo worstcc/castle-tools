@@ -10,8 +10,6 @@ require 'securerandom'
 require 'seven_zip_ruby'
 require 'tmpdir'
 
-# TODO: 'build.json' specifies vanilla bsp whitelist, blacklisted public files
-
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [source directory] [output directory]"
 options = {}
 OptionParser.new do |opts|
@@ -37,6 +35,7 @@ OptionParser.new do |opts|
   opts.on('-p','--public','omit code in dev blocks, use version number over date for mod info') { options[:public] = true }
   opts.on('-f','--force','make build if data directory/archive already exists') { options[:force] = true }
 end.parse!
+OPTIONS = options
 abort usage if ARGV.length != 2
 
 SRCDIR = File.expand_path(ARGV[0])
@@ -74,13 +73,13 @@ SWFDIR = File.join(SRCDIR,'swf')
 abort 'error: source directory does not contain the expected directories' if (!Dir.exist?(AUDIODIR) || !Dir.exist?(FONTSDIR) || !Dir.exist?(SWFSRCDIR) || !Dir.exist?(SWFDIR)) || (Dir.exist?(SWFSRCDIR) && !Dir.exist?(AUDIODIR) && !Dir.exist?(FONTSDIR) && !Dir.exist?(SWFDIR))
 
 # get data directory
-if options[:archive]
+if OPTIONS[:archive]
   DATAPARENTDIR = Dir.mktmpdir
   DATADIR = File.join(DATAPARENTDIR,'data')
   at_exit { FileUtils.rm_rf(DATAPARENTDIR) }
 else
   DATADIR = File.join(OUTDIR,'data')
-  if options[:force]
+  if OPTIONS[:force]
     FileUtils.rm_rf(DATADIR)
   elsif Dir.exist?(DATADIR)
     abort '\'data\' already exists in output directory'
@@ -101,17 +100,17 @@ if Dir.exist?(SWFDIR)
 end
 
 # get mod info
-if options[:modName]
-  MODINFONAME = options[:modName]
+if OPTIONS[:modName]
+  MODINFONAME = OPTIONS[:modName]
 elsif buildJson && buildJson['name']
   MODINFONAME = buildJson['name'].to_s.strip
 else
   warn 'mod name not specified, using \'Mod\' as the name'
   MODINFONAME = 'Mod'.freeze
 end
-if options[:public]
-  if options[:version]
-    MODINFOVERSION = options[:modVersion]
+if OPTIONS[:public]
+  if OPTIONS[:version]
+    MODINFOVERSION = OPTIONS[:modVersion]
   elsif buildJson && buildJson['version']
     MODINFOVERSION = buildJson['version'].to_s.strip
   else
@@ -122,13 +121,14 @@ else
   MODINFOVERSION = "dev #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} (#{SWFFILESHASH[0...8]})".freeze
 end
 
-puts "#{MODINFONAME} #{MODINFOVERSION}"
+puts "building \"#{MODINFONAME} #{MODINFOVERSION}\""
 
-# get vanilla bsp whitelist
-BSPEXCEPTIONS = (buildJson && buildJson['vanillaBsps']) || []
+# get vanilla bsp/dev only whitelists
+VANILLABSPS = (buildJson && buildJson['vanillaBsps']) || []
+DEVONLYFILES = (buildJson && buildJson['devOnlyFiles']) || []
 
 # get archive file name
-if options[:archive]
+if OPTIONS[:archive]
   archiveName = MODINFOVERSION.dup
   archiveName.gsub!(/\bdev\b/,'Dev')
   archiveName.gsub!(/\s+/,'')
@@ -136,7 +136,7 @@ if options[:archive]
   archiveName.gsub!(/(\d{4})-(\d{2})-(\d{2})/,'\1\2\3')
   archiveName.gsub!(/(\d{2}):(\d{2}):(\d{2})/,'\1\2\3')
   ARCHIVEFILE = File.join(OUTDIR,"#{MODINFONAME}#{archiveName}.7z")
-  if options[:force]
+  if OPTIONS[:force]
     FileUtils.rm(ARCHIVEFILE) if File.exist?(ARCHIVEFILE)
   elsif File.exist?(ARCHIVEFILE)
     abort "build already made (#{File.basename(ARCHIVEFILE)})"
@@ -147,7 +147,16 @@ def processFonts!
   return unless Dir.exist?(FONTSDIR)
 
   puts 'copying fonts...'
-  FileUtils.cp_r(FONTSDIR,File.join(DATADIR,'fonts'))
+
+  fontsDir = File.join(DATADIR,'fonts')
+  FileUtils.mkdir(fontsDir)
+
+  Dir.glob(File.join(FONTSDIR,'*')).each do |file|
+    next unless File.file?(file)
+    next if OPTIONS[:public] && DEVONLYFILES.include?(File.basename(file))
+
+    FileUtils.cp(file,fontsDir)
+  end
 end
 
 def findMetadataFromScript(startDir)
@@ -184,7 +193,8 @@ def processBsps!
       next unless line =~ /f_BSPLoadLevel\("\$?([\w-]+)"\)/
 
       bspName = Regexp.last_match(1)
-      next if bspName.start_with?('bsp') && !BSPEXCEPTIONS.include?(bspName)
+      next if bspName.start_with?('bsp') && !VANILLABSPS.include?(bspName)
+      next if OPTIONS[:public] && DEVONLYFILES.include?(bspName)
 
       bspList << [bspName,file] unless bspList.any? { |name,_| name == bspName }
     end
@@ -224,7 +234,7 @@ def findMetadataForSwf(swfName)
   @metadataCache[swfName]
 end
 
-def processSwfs!(options)
+def processSwfs!
   return unless SWFFILES
 
   gameDir = File.join(DATADIR,'game')
@@ -237,6 +247,14 @@ def processSwfs!(options)
 
   SWFFILES.each do |swfFile|
     swfName = File.basename(swfFile)
+
+    if OPTIONS[:public] && DEVONLYFILES.include?(swfName)
+      tempSwf = "#{swfFile}.tmp"
+      FileUtils.mv(swfFile,tempSwf)
+      at_exit { FileUtils.mv(tempSwf,tempSwf.sub('.tmp','')) }
+      next
+    end
+
     # sync scripts
     metadataFile = findMetadataForSwf(swfName)
     next unless metadataFile
@@ -262,7 +280,7 @@ def processSwfs!(options)
       modified = original
 
       # public mode: remove dev only blocks
-      if options[:public]
+      if OPTIONS[:public]
         modified = modified.gsub(%r{// BUILD: BEGIN DEV ONLY.*?// BUILD: END DEV ONLY}m,'')
         devBlocks += 1 if modified != original
       end
@@ -339,13 +357,24 @@ def processAudio!
 
   puts 'converting audio...'
 
+  audioFiles = Dir.glob(File.join(AUDIODIR,'*.{mp3,flac,ogg,aac,m4a,wav,opus}'))
+  return if audioFiles.empty?
+
+  if OPTIONS[:public]
+    audioFiles.each do |file|
+      next unless DEVONLYFILES.include?(File.basename(file))
+
+      tempFile = "#{file}.tmp"
+      FileUtils.mv(file,tempFile)
+      at_exit { FileUtils.mv(tempFile,tempFile.sub('.tmp','')) }
+    end
+    audioFiles.reject! { |file| DEVONLYFILES.include?(File.basename(file)) }
+  end
+
   musicDir = File.join(DATADIR,'music')
   soundsDir = File.join(DATADIR,'sounds')
   FileUtils.mkdir(musicDir)
   FileUtils.mkdir(soundsDir)
-
-  audioFiles = Dir.glob(File.join(AUDIODIR,'*.{mp3,flac,ogg,aac,m4a,wav,opus}'))
-  return if audioFiles.empty?
 
   Parallel.each(audioFiles,in_threads: Etc.nprocessors / 2) do |audioFile|
     filename = File.basename(audioFile)
@@ -357,11 +386,11 @@ def processAudio!
   end
 end
 
-def archive!(options)
-  return unless options[:archive]
+def archive!
+  return unless OPTIONS[:archive]
 
   password = nil
-  if options[:protect]
+  if OPTIONS[:protect]
     password = SecureRandom.base64
     puts "creating archive... (password: #{password})"
   else
@@ -381,11 +410,11 @@ end
 
 processFonts!
 processBsps!
-processSwfs!(options)
+processSwfs!
 processAudio!
-archive!(options)
+archive!
 
-if options[:archive]
+if OPTIONS[:archive]
   puts "done (#{ARCHIVEFILE})"
 else
   puts "done (#{DATADIR})"

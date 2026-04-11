@@ -10,6 +10,8 @@ require 'securerandom'
 require 'seven_zip_ruby'
 require 'tmpdir'
 
+# TODO: 'sync only' mode
+
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [source directory] [output directory]"
 options = {}
 OptionParser.new do |opts|
@@ -55,12 +57,21 @@ abort 'error: xWMAEncode.exe not found in script directory' unless File.exist?(X
 
 def commandExists?(cmd)
   if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
-    system('where.exe',cmd,out: File::NULL,err: File::NULL)
+    `where.exe #{cmd}`.split("\n").first
   else
-    system('which',cmd,out: File::NULL,err: File::NULL)
+    `which #{cmd}`.strip
   end
 end
 
+ffdec = nil
+if RUBY_PLATFORM =~ /mswin|mingw|jruby/
+  ffdec = 'C:\\Program Files (x86)\\FFDec\\ffdec-cli.exe'
+elsif RUBY_PLATFORM =~ /linux/
+  ffdec = commandExists?('ffdec')
+end
+abort 'error: jpexs is not installed' if ffdec.nil? || !File.exist?(ffdec)
+
+abort 'error: ruffle is not installed' unless commandExists?('ruffle')
 abort 'error: ffmpeg is not installed' unless commandExists?('ffmpeg')
 abort 'error: wine is not installed' if RbConfig::CONFIG['host_os'] =~ /linux/ && (!commandExists?('wine') || !commandExists?('winepath'))
 

@@ -10,8 +10,6 @@ require 'securerandom'
 require 'seven_zip_ruby'
 require 'tmpdir'
 
-# TODO: 'sync only' mode
-
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [source directory] [output directory]"
 options = {}
 OptionParser.new do |opts|
@@ -57,11 +55,12 @@ XWMAENCODE = File.join(__dir__,'xWMAEncode.exe')
 abort 'error: xWMAEncode.exe not found in script directory' unless File.exist?(XWMAENCODE)
 
 def commandExists?(cmd)
-  if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
-    `where.exe #{cmd}`.split("\n").first
-  else
-    `which #{cmd}`.strip
-  end
+  path = if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
+           `where.exe #{cmd}`.split("\n").first
+         else
+           `which #{cmd}`.strip
+         end
+  path.empty? ? false : path
 end
 
 ffdec = nil
@@ -70,6 +69,7 @@ if RUBY_PLATFORM =~ /mswin|mingw|jruby/
 elsif RUBY_PLATFORM =~ /linux/
   ffdec = commandExists?('ffdec')
 end
+puts ffdec
 abort 'error: jpexs is not installed' if ffdec.nil? || !File.exist?(ffdec)
 
 abort 'error: ruffle is not installed' unless commandExists?('ruffle')

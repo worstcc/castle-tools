@@ -36,6 +36,7 @@ OptionParser.new do |opts|
   opts.on('-vNAME','--modVersion NAME',String,'version to use for archive/$MODINFO') { |name| options[:modVersion] = name }
   opts.on('-p','--public','omit code in dev blocks, use version number over date for mod info') { options[:public] = true }
   opts.on('-f','--force','make build if data directory/archive already exists') { options[:force] = true }
+  opts.on('-s','--sync','only sync swfs') { options[:sync] = true }
 end.parse!
 OPTIONS = options
 abort usage if ARGV.length != 2
@@ -84,19 +85,21 @@ SWFDIR = File.join(SRCDIR,'swf')
 abort 'error: source directory does not contain the expected directories' if (!Dir.exist?(AUDIODIR) || !Dir.exist?(FONTSDIR) || !Dir.exist?(SWFSRCDIR) || !Dir.exist?(SWFDIR)) || (Dir.exist?(SWFSRCDIR) && !Dir.exist?(AUDIODIR) && !Dir.exist?(FONTSDIR) && !Dir.exist?(SWFDIR))
 
 # get data directory
-if OPTIONS[:archive]
-  DATAPARENTDIR = Dir.mktmpdir
-  DATADIR = File.join(DATAPARENTDIR,'data')
-  at_exit { FileUtils.rm_rf(DATAPARENTDIR) }
-else
-  DATADIR = File.join(OUTDIR,'data')
-  if OPTIONS[:force]
-    FileUtils.rm_rf(DATADIR)
-  elsif Dir.exist?(DATADIR)
-    abort '\'data\' already exists in output directory'
+unless OPTIONS[:sync]
+  if OPTIONS[:archive]
+    DATAPARENTDIR = Dir.mktmpdir
+    DATADIR = File.join(DATAPARENTDIR,'data')
+    at_exit { FileUtils.rm_rf(DATAPARENTDIR) }
+  else
+    DATADIR = File.join(OUTDIR,'data')
+    if OPTIONS[:force]
+      FileUtils.rm_rf(DATADIR)
+    elsif Dir.exist?(DATADIR)
+      abort '\'data\' already exists in output directory'
+    end
   end
+  Dir.mkdir(DATADIR)
 end
-Dir.mkdir(DATADIR)
 
 buildFile = File.join(SRCDIR,'build.json')
 buildJson = nil
@@ -110,33 +113,33 @@ if Dir.exist?(SWFDIR)
   srand(SWFFILESHASH.to_i)
 end
 
-# get mod info
-if OPTIONS[:modName]
-  MODINFONAME = OPTIONS[:modName]
-elsif buildJson && buildJson['name']
-  MODINFONAME = buildJson['name'].to_s.strip
-else
-  warn 'mod name not specified, using \'Mod\' as the name'
-  MODINFONAME = 'Mod'.freeze
-end
-if OPTIONS[:public]
-  if OPTIONS[:version]
-    MODINFOVERSION = OPTIONS[:modVersion]
-  elsif buildJson && buildJson['version']
-    MODINFOVERSION = buildJson['version'].to_s.strip
+unless OPTIONS[:sync]
+  # get mod info
+  if OPTIONS[:modName]
+    MODINFONAME = OPTIONS[:modName]
+  elsif buildJson && buildJson['name']
+    MODINFONAME = buildJson['name'].to_s.strip
   else
-    MODINFOVERSION = '1.0'.freeze
-    warn 'version not specified, using \'1.0\' as the version'
+    warn 'mod name not specified, using \'Mod\' as the name'
+    MODINFONAME = 'Mod'.freeze
   end
-else
-  MODINFOVERSION = "dev #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} (#{SWFFILESHASH[0...8]})".freeze
+  if OPTIONS[:public]
+    if OPTIONS[:version]
+      MODINFOVERSION = OPTIONS[:modVersion]
+    elsif buildJson && buildJson['version']
+      MODINFOVERSION = buildJson['version'].to_s.strip
+    else
+      MODINFOVERSION = '1.0'.freeze
+      warn 'version not specified, using \'1.0\' as the version'
+    end
+  else
+    MODINFOVERSION = "dev #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} (#{SWFFILESHASH[0...8]})".freeze
+  end
+  puts "building \"#{MODINFONAME} #{MODINFOVERSION}\""
+  # get vanilla bsp/dev only whitelists
+  VANILLABSPS = (buildJson && buildJson['vanillaBsps']) || []
+  DEVONLYFILES = (buildJson && buildJson['devOnlyFiles']) || []
 end
-
-puts "building \"#{MODINFONAME} #{MODINFOVERSION}\""
-
-# get vanilla bsp/dev only whitelists
-VANILLABSPS = (buildJson && buildJson['vanillaBsps']) || []
-DEVONLYFILES = (buildJson && buildJson['devOnlyFiles']) || []
 
 # get archive file name
 if OPTIONS[:archive]
@@ -248,10 +251,12 @@ end
 def processSwfs!
   return unless SWFFILES
 
-  gameDir = File.join(DATADIR,'game')
-  levelsDir = File.join(DATADIR,'levels')
-  FileUtils.mkdir(gameDir)
-  FileUtils.mkdir(levelsDir)
+  unless OPTIONS[:sync]
+    gameDir = File.join(DATADIR,'game')
+    levelsDir = File.join(DATADIR,'levels')
+    FileUtils.mkdir(gameDir)
+    FileUtils.mkdir(levelsDir)
+  end
 
   syncingMessage = nil
   modifiedSwfs = {}
@@ -280,55 +285,57 @@ def processSwfs!
 
     puts "syncing #{swfName}"
 
-    # perform script substitutions
     modifiedScripts = {}
     originalMetadata = nil
     devBlocks = 0
     modInfoCount = 0
     randomCount = 0
-    Dir.glob(File.join(scriptsDir,'**','*.as')).each do |file|
-      original = File.read(file)
-      modified = original
+    unless OPTIONS[:sync]
+      # perform script substitutions
+      Dir.glob(File.join(scriptsDir,'**','*.as')).each do |file|
+        original = File.read(file)
+        modified = original
 
-      # public mode: remove dev only blocks
-      if OPTIONS[:public]
-        modified = modified.gsub(%r{// BUILD: BEGIN DEV ONLY.*?// BUILD: END DEV ONLY}m,'')
-        devBlocks += 1 if modified != original
-      end
+        # public mode: remove dev only blocks
+        if OPTIONS[:public]
+          modified = modified.gsub(%r{// BUILD: BEGIN DEV ONLY.*?// BUILD: END DEV ONLY}m,'')
+          devBlocks += 1 if modified != original
+        end
 
-      # update '$MODINFO' & '$RANDOM()' in strings
-      lines = modified.split("\n")
-      lines.each_with_index do |line,i|
-        nextLine = lines[i + 1]
-        next unless nextLine
+        # update '$MODINFO' & '$RANDOM()' in strings
+        lines = modified.split("\n")
+        lines.each_with_index do |line,i|
+          nextLine = lines[i + 1]
+          next unless nextLine
 
-        if line.strip.include?('// BUILD: MOD INFO')
-          if nextLine =~ /".*\$MODINFO.*"/
-            lines[i + 1] = nextLine.gsub('$MODINFO',"#{MODINFONAME} #{MODINFOVERSION}")
-            modInfoCount += 1
-          end
-        elsif line.strip.include?('// BUILD: RANDOM')
-          if nextLine =~ /"s*\$RANDOM\((\d+)\)\s*"/
-            randomVal = Regexp.last_match(1).to_i
-            if randomVal.positive?
-              lines[i + 1] = nextLine.gsub(/"s*\$RANDOM\((\d+)\)\s*"/,rand(1..randomVal).to_s)
-              randomCount += 1
-            else
-              warn '(swf) not substituting non-positive random value'
+          if line.strip.include?('// BUILD: MOD INFO')
+            if nextLine =~ /".*\$MODINFO.*"/
+              lines[i + 1] = nextLine.gsub('$MODINFO',"#{MODINFONAME} #{MODINFOVERSION}")
+              modInfoCount += 1
+            end
+          elsif line.strip.include?('// BUILD: RANDOM')
+            if nextLine =~ /"s*\$RANDOM\((\d+)\)\s*"/
+              randomVal = Regexp.last_match(1).to_i
+              if randomVal.positive?
+                lines[i + 1] = nextLine.gsub(/"s*\$RANDOM\((\d+)\)\s*"/,rand(1..randomVal).to_s)
+                randomCount += 1
+              else
+                warn '(swf) not substituting non-positive random value'
+              end
             end
           end
         end
+
+        modified = lines.join("\n") if modInfoCount.positive? || randomCount.positive?
+
+        next unless modified != original
+
+        File.write(file,modified)
+        modifiedScripts[file] = original
+        originalMetadata = File.read(metadataFile)
+        originalSwf = File.read(swfFile)
+        modifiedSwfs[swfFile] = originalSwf
       end
-
-      modified = lines.join("\n") if modInfoCount.positive? || randomCount.positive?
-
-      next unless modified != original
-
-      File.write(file,modified)
-      modifiedScripts[file] = original
-      originalMetadata = File.read(metadataFile)
-      originalSwf = File.read(swfFile)
-      modifiedSwfs[swfFile] = originalSwf
     end
 
     if system(RbConfig.ruby,SYNCSCRIPTSRB,swfFile,scriptsDir,out: File::NULL,err: File::NULL)
@@ -345,6 +352,8 @@ def processSwfs!
     end
     File.write(metadataFile,originalMetadata) unless originalMetadata.nil?
   end
+
+  exit 0 if OPTIONS[:sync]
 
   # batch encrypt
   puts 'encrypting swfs...'
@@ -419,14 +428,18 @@ def archive!
   end
 end
 
-processFonts!
-processBsps!
-processSwfs!
-processAudio!
-archive!
-
-if OPTIONS[:archive]
-  puts "done (#{ARCHIVEFILE})"
+if OPTIONS[:sync]
+  processSwfs!
 else
-  puts "done (#{DATADIR})"
+  processFonts!
+  processBsps!
+  processSwfs!
+  processAudio!
+  archive!
+  if OPTIONS[:archive]
+    puts "done (#{ARCHIVEFILE})"
+  else
+    puts "done (#{DATADIR})"
+  end
 end
+

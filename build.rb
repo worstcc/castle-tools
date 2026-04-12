@@ -69,7 +69,6 @@ if RUBY_PLATFORM =~ /mswin|mingw|jruby/
 elsif RUBY_PLATFORM =~ /linux/
   ffdec = commandExists?('ffdec')
 end
-puts ffdec
 abort 'error: jpexs is not installed' if ffdec.nil? || !File.exist?(ffdec)
 
 abort 'error: ruffle is not installed' unless commandExists?('ruffle')
@@ -157,6 +156,9 @@ if OPTIONS[:archive]
   end
 end
 
+BLANKBSP = buildJson && buildJson['blankBsp'] == true
+BLANKBSPNAME = (buildJson && buildJson['blankBspName']) || 'bspblank'
+
 def processFonts!
   return unless Dir.exist?(FONTSDIR)
 
@@ -192,12 +194,7 @@ def processBsps!
   return unless Dir.exist?(SWFSRCDIR)
   return unless Dir.exist?(SWFDIR)
 
-  puts 'creating bsps...'
-
   bspList = []
-  bspDir = File.join(DATADIR,'bsps')
-
-  FileUtils.mkdir(bspDir)
 
   # collect bsp names
   Find.find(SWFSRCDIR).each do |file|
@@ -213,7 +210,14 @@ def processBsps!
       bspList << [bspName,file] unless bspList.any? { |name,_| name == bspName }
     end
   end
-  return if bspList.empty?
+  return if bspList.empty? && !BLANKBSP
+
+  puts 'creating bsps...'
+
+  bspDir = File.join(DATADIR,'bsps')
+  FileUtils.mkdir(bspDir)
+
+  system(RbConfig.ruby,BSPRB,'-n',BLANKBSPNAME,'--blank',bspDir,out: File::NULL,err: File::NULL)
 
   # match bsp name to their swf file then create bsp
   Parallel.each(bspList,in_threads: Etc.nprocessors / 2) do |(bspName,srcFile)|
@@ -442,4 +446,3 @@ else
     puts "done (#{DATADIR})"
   end
 end
-

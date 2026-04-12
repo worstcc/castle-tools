@@ -204,7 +204,13 @@ def processBsps!
       next unless line =~ /f_BSPLoadLevel\("\$?([\w-]+)"\)/
 
       bspName = Regexp.last_match(1)
-      next if bspName.start_with?('bsp') && !VANILLABSPS.include?(bspName)
+      # "vanilla" bsps: starts with "bsp", id 1-61, optional letter a-d
+      # exclude these by default to prevent unnecessary bsp building (edits of vanilla levels)
+      next if bspName =~ /^bsp([1-9]|[1-5][0-9]|6[01])([a-d])?$/ && !VANILLABSPS.include?(bspName)
+
+      # skip blank bsps
+      next if bspName =~ /blank|nil/
+
       next if OPTIONS[:public] && DEVONLYFILES.include?(bspName)
 
       bspList << [bspName,file] unless bspList.any? { |name,_| name == bspName }

@@ -355,8 +355,8 @@ tags.each do |tag|
   end
 
   # move tags based on placement
-  id = tag['type'] == 'PlaceObject2Tag' ? tag['characterId'] : tag['spriteId']
-  next unless id && %w[PlaceObject2Tag DefineSpriteTag].include?(tag['type'])
+  id = getTagID(tag)
+  next unless id
 
   earliest = spriteExportPlacements[id] || charIdToEarliestPlacement[id]
   next unless earliest

@@ -5,8 +5,6 @@ require 'optparse'
 require 'tempfile'
 require 'tmpdir'
 
-# TODO: add detecting & deleting unused tags
-
 def fixMalformedPixlTags(tags)
   # on each copy/move, JPEXS adds 6 bytes at the start & removes 6 bytes at the end
   # tag can be recovered 2 copies deep, 2+ then image data is lost
@@ -267,8 +265,7 @@ OptionParser.new do |opts|
 
     options[:id] = id
   end
-  opts.on('-v','--verbose','print ID mapping & pixl tag diffs') { options[:verbose] = true }
-  opts.on('-r','--remove-unused','remove unused ExportAssets tags') { options[:removeunused] = true }
+  opts.on('-c','--clean','remove unused tags from swf instead of moving them') { options[:clean] = true }
   opts.on('-d','--dry-run','don\'t modify the swf') { options[:dryrun] = true }
 end.parse!
 
@@ -347,16 +344,14 @@ frameGroups.each_with_index do |frame,i|
   end
 end
 # exportassets placements
-tags.each_with_index do |tag,i|
-  next unless tag['type'] == 'DefineSpriteTag' && tag['spriteId']
-  next unless (nextTag = tags[i + 1]) && nextTag['type'] == 'ExportAssetsTag'
-  next unless nextTag.at_xpath('tags/item')&.content == tag['spriteId']
-
-  spriteExportPlacements[tag['spriteId']] = tagToFrame[tag]
-  charIdToEarliestPlacement[tag['spriteId']] ||= tagToFrame[tag]
-end
-# move tags based on placement
+exportAssetsReferences = tags.filter_map { |tag| tag['type'] == 'ExportAssetsTag' ? tag.at_xpath('tags/item')&.content : nil }.to_set
 tags.each do |tag|
+  if tag['type'] == 'DefineSpriteTag' && tag['spriteId'] && exportAssetsReferences.include?(tag['spriteId'])
+    spriteExportPlacements[tag['spriteId']] = tagToFrame[tag]
+    charIdToEarliestPlacement[tag['spriteId']] ||= tagToFrame[tag]
+  end
+
+  # move tags based on placement
   id = tag['type'] == 'PlaceObject2Tag' ? tag['characterId'] : tag['spriteId']
   next unless id && %w[PlaceObject2Tag DefineSpriteTag].include?(tag['type'])
 
@@ -366,6 +361,32 @@ tags.each do |tag|
   tagToEarliestFrame[tag] = earliest
   getTagDependencies(tag,tags,idToTag).each do |dep|
     tagToEarliestFrame[dep] ||= earliest
+  end
+end
+
+# handle unused tags
+usedIds = tagToEarliestFrame.keys.filter_map { |tag| getTagID(tag) }.to_set
+unusedTags = []
+tags.each_with_index do |tag,i|
+  next unless (id = getTagID(tag))
+  next if usedIds.include?(id)
+  next if tag['zlibBitmapData'] && tags[i + 1..].any? { |tag| tag['unknownData'] && usedIds.include?(getTagID(tag)) }
+
+  unusedTags << tag
+end
+if unusedTags.any?
+  if OPTIONS[:clean]
+    unusedTags.each { |tag| tags.delete(tag) }
+    puts "#{unusedTags.length} unused tag(s) removed"
+  else
+    targetFrame = showFrameIndices.length - 1
+    targetIndex = showFrameIndices.last
+    unusedTags.each do |tag|
+      tags.delete(tag)
+      tags.insert(targetIndex,tag)
+      tagToEarliestFrame[tag] = targetFrame
+    end
+    puts "#{unusedTags.length} unused tag(s) moved to end of timeline"
   end
 end
 
@@ -459,14 +480,10 @@ fontNameByTarget.each do |id,tag|
   updateTagId(tag,idMapping[id])
 end
 
-puts "ids: #{idMapping}" if OPTIONS[:verbose]
-
 # remove temp variables
 sortedTags.each do |tag|
   tag.remove_attribute('tempBitmapId')
 end
-
-# sortedTags = tags.dup
 
 # replace original tags with sorted tags
 tagsNode.children = Nokogiri::XML::NodeSet.new(DOC)

@@ -76,8 +76,11 @@ def padPixlTags
     newLXIPOffset = offset + 20
     paddingLength = ((32 - newLXIPOffset % 32) % 32)
     # byte difference
-    id = [data[0,8]].pack('H*').unpack1('V').to_s
-    puts "pixl (ID #{id}): #{(d = paddingLength - bytesToDelete) >= 0 ? '+' : ''}#{d} bytes"
+    byteDifference = paddingLength - bytesToDelete
+    unless byteDifference.zero?
+      id = [data[0,8]].pack('H*').unpack1('V').to_s
+      puts "pixl (id=#{id}): #{byteDifference.positive? ? '+' : ''}#{byteDifference} bytes"
+    end
     swfByteDiff += (bytesToDelete * -1) + paddingLength
     paddingHex = 'CD' * paddingLength
     tag['unknownData'] = data[0...40] + paddingHex + data[lxipIndex..]

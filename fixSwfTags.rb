@@ -133,8 +133,6 @@ def getTagDependencies(tag,allTags,idToTag,visited = Set.new)
   # prevent infinite recursion
   return [] if visited.include?(tag)
 
-  # $__benchmark_start ||= Time.now
-  # start = Time.now
   visited.add(tag)
   deps = []
   case tag['type']
@@ -343,7 +341,16 @@ frameGroups.each_with_index do |frame,i|
     tagToFrame[tag] ||= i
     next unless tag['type'] == 'PlaceObject2Tag' && tag['characterId']
 
-    charIdToEarliestPlacement[tag['characterId']] ||= i
+    charIdToEarliestPlacement[tag['characterId']] = [charIdToEarliestPlacement[tag['characterId']],i].compact.min
+
+    definingTag = idToTag[tag['characterId']]
+    next unless definingTag
+
+    getTagDependencies(definingTag,tags,idToTag).each do |dep|
+      next unless (id = getTagID(dep))
+
+      charIdToEarliestPlacement[id] = [charIdToEarliestPlacement[id],i].compact.min
+    end
   end
 end
 # exportassets placements
@@ -351,7 +358,7 @@ exportAssetsReferences = tags.filter_map { |tag| tag['type'] == 'ExportAssetsTag
 tags.each do |tag|
   if tag['type'] == 'DefineSpriteTag' && tag['spriteId'] && exportAssetsReferences.include?(tag['spriteId'])
     spriteExportPlacements[tag['spriteId']] = tagToFrame[tag]
-    charIdToEarliestPlacement[tag['spriteId']] ||= tagToFrame[tag]
+    charIdToEarliestPlacement[tag['spriteId']] = [charIdToEarliestPlacement[tag['spriteId']],tagToFrame[tag]].compact.min
   end
 
   # move tags based on placement
@@ -363,7 +370,7 @@ tags.each do |tag|
 
   tagToEarliestFrame[tag] = earliest
   getTagDependencies(tag,tags,idToTag).each do |dep|
-    tagToEarliestFrame[dep] ||= earliest
+    tagToEarliestFrame[dep] = [tagToEarliestFrame[dep],earliest].compact.min
   end
 end
 

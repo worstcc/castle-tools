@@ -226,8 +226,18 @@ end
 
 def processSecondaryTags(sortedTags,secondaryType,primaryMap,idAttribute,tagsToRemove)
   byTarget = {}
+  seenExportNames = Set.new
   sortedTags.each do |tag|
     next unless tag['type'] == secondaryType
+
+    if secondaryType == 'ExportAssetsTag'
+      name = tag.at_xpath('names/item')&.content
+      if name && seenExportNames.include?(name)
+        tagsToRemove.add(tag)
+        next
+      end
+      seenExportNames.add(name) if name
+    end
 
     targetId = tag[idAttribute] || tag.at_xpath('tags/item')&.text
     if targetId.nil? || !primaryMap.key?(targetId)
@@ -354,7 +364,15 @@ frameGroups.each_with_index do |frame,i|
   end
 end
 # exportassets placements
-exportAssetsReferences = tags.filter_map { |tag| tag['type'] == 'ExportAssetsTag' ? tag.at_xpath('tags/item')&.content : nil }.to_set
+exportAssetsNameToId = {}
+tags.each do |tag|
+  next unless tag['type'] == 'ExportAssetsTag'
+
+  next unless (name = tag.at_xpath('names/item')&.content) && (id = tag.at_xpath('tags/item')&.content)
+
+  exportAssetsNameToId[name] ||= id
+end
+exportAssetsReferences = exportAssetsNameToId.values.to_set
 tags.each do |tag|
   if tag['type'] == 'DefineSpriteTag' && tag['spriteId'] && exportAssetsReferences.include?(tag['spriteId'])
     spriteExportPlacements[tag['spriteId']] = tagToFrame[tag]

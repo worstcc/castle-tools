@@ -1,58 +1,75 @@
 #!/usr/bin/env ruby
-# todo:
-# specify placed dimensions for import
-# export hybrid ps3 player/fx pixl tags
-# xbla/ps3 import (big endian "PIXL")
+
 require 'mini_magick'
+require 'nokogiri'
+require 'optparse'
 require 'pathname'
 require 'tempfile'
 require 'tmpdir'
-require 'nokogiri'
-require 'optparse'
 
-def findFFDec
-  ffdecPath = nil
-  if RUBY_PLATFORM =~ /mswin|mingw|jruby/
-    ffdecPath = 'C:\\Program Files (x86)\\FFDec\\ffdec-cli.exe'
-  elsif RUBY_PLATFORM =~ /linux/
-    ffdecPath = '/usr/bin/ffdec'
-    ffdecPath = `which ffdec`.strip unless File.exist?(ffdecPath)
-  end
-  abort 'error: JPEXS not found' if ffdecPath.nil? || !File.exist?(ffdecPath)
-  ffdecPath
-end
+# TODO: export hybrid ps3 player/fx pixl tags
+# TODO: xbla/ps3 import (big endian "PIXL")
 
 options = {}
 OptionParser.new do |opts|
   opts.banner = "usage: #{File.basename($PROGRAM_NAME)} [image|swf] [output directory]"
-  opts.on('-f','--format FORMAT',String,'game version to target (steam,xbla,ps3) steam is default') do |format|
+  opts.on('-p','--platform PLATFORM',String,'game platform to target (steam (default),xbla,ps3)') do |format|
     abort 'error: invalid format' unless format.match?(/steam|xbla|ps3/)
     options[:format] = format
   end
-  opts.on('-r','--export-raw','use raw image dimensions in export') { options[:exportraw] = true }
-  opts.on('-d','--dry-run','don\'t write to files') { options[:dryrun] = true }
+  opts.on('-s','--size SIZE',Integer,'import: image size to use when scaling down (default/max: 512)') { |size| options[:size] = size }
+  opts.on('-d','--placedDimensions DIMENSIONS',String,'import: dimensions to use for image shape (default: original image dimensions') do |dimensions|
+    abort 'error: invalid dimensions format, use WIDTHxHEIGHT (e.g. 1024x512)' unless dimensions.match?(/^\d+(\.\d+)?x\d+(\.\d+)?$/i)
+    options[:placedDimensions] = dimensions
+  end
+  opts.on('-o','--placedOffset OFFSETS',String,'import: offset to use for image shape (default: none)') do |offset|
+    abort 'error: invalid dimensions format, use X,Y (e.g. 512,0)' unless offset.match?(/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/)
+    options[:placedOffset] = offset
+  end
+  opts.on('-n','--noScale','import: don\'t scale down image (greatly increases file size)') { options[:noScale] = true }
+  opts.on('-f','--noSizeLimit','import: allow image size larger than 512 (not recommended, will cause issues)') { options[:force] = true }
+  opts.on('-r','--raw','export: use raw image dimensions instead of placed dimensions') { options[:exportRaw] = true }
 end.parse!
-
 options[:format] = 'steam' unless options[:format]
+options[:size] = 512 unless options[:size]
 
 abort "usage: #{File.basename($PROGRAM_NAME)} [image|swf] [output directory]" if ARGV.length != 2
 
 inputFile = File.expand_path(ARGV[0])
 abort "error: #{File.basename(inputFile)} not found" unless File.exist?(inputFile)
-abort "error: #{File.basename(inputFile)} is not an accepted image or swf" unless ['.bmp','.jpg','.jpeg','.png','.gif','.webp','.swf'].include?(File.extname(inputFile).downcase)
+abort "error: #{File.basename(inputFile)} is not an accepted image or swf" unless ['.bmp','.jpg','.jpeg','.jxl','.png','.gif','.webp','.swf'].include?(File.extname(inputFile).downcase)
 
 outputDir = File.expand_path(ARGV[1])
 abort "error: #{outputDir} not found" unless Dir.exist?(outputDir)
 
-ffdec = findFFDec
+def commandExists?(cmd)
+  path = if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
+           `where.exe #{cmd}`.split("\n").first
+         else
+           `which #{cmd}`.strip
+         end
+  path.empty? ? false : path
+end
+
+ffdec = nil
+if RUBY_PLATFORM =~ /mswin|mingw|jruby/
+  ffdec = 'C:\\Program Files (x86)\\FFDec\\ffdec-cli.exe'
+elsif RUBY_PLATFORM =~ /linux/
+  ffdec = commandExists?('ffdec')
+end
+abort 'error: jpexs is not installed' if ffdec.nil? || !File.exist?(ffdec)
 
 if File.extname(inputFile).downcase == '.swf'
   # extract images from swf pixl tags
 
   # get xml
-  swfXml = Tempfile.new(['','.xml'])
-  system(ffdec,'-swf2xml',inputFile.to_s,swfXml.path)
-  doc = Nokogiri::XML(File.read(swfXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
+  tempXml = Tempfile.create(['','.xml'])
+  at_exit do
+    tempXml.close
+    File.unlink(tempXml)
+  end
+  abort 'error: ffdec failed' unless system(ffdec,'-swf2xml',inputFile.to_s,tempXml.path)
+  doc = Nokogiri::XML(File.read(tempXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
 
   # collect unknown tags
   found = false
@@ -72,12 +89,14 @@ if File.extname(inputFile).downcase == '.swf'
         next
       end
       endian = 'V' # little endian
+      endian2 = 'v'
     when 'xbla'
       if data[-32,32] != '00000024000000280000003000000003'
         puts 'invalid pixl tag'
         next
       end
       endian = 'N' # big endian
+      endian2 = 'n'
     when 'ps3'
       if data[-32,32] != '00000024000000280000003000000003'
         puts 'invalid pixl tag'
@@ -85,6 +104,7 @@ if File.extname(inputFile).downcase == '.swf'
       end
       # get pixl data
       endian = 'N'
+      endian2 = 'n'
       next if data[pixlHeaderIndex,8] == '4c584950' # odd hybrid version seen in ps3 player.swf
     end
 
@@ -92,22 +112,23 @@ if File.extname(inputFile).downcase == '.swf'
     width = [data[pixlHeaderIndex + 32,8]].pack('H*').unpack1(endian)
     height = [data[pixlHeaderIndex + 40,8]].pack('H*').unpack1(endian)
     id = [data[pixlHeaderIndex + 160,8]].pack('H*').unpack1(endian)
-    placedWidth = ([data[16,4]].pack('H*').unpack1('v').to_f / 10)
-    placedHeight = ([data[32,4]].pack('H*').unpack1('v').to_f / 10)
+
+    # average the inverted & direct values to get each placement dimension
+    placedWidthInverted = (65536 - [data[8,4]].pack('H*').unpack1(endian2)).to_f / 10
+    placedWidthDirect = [data[16,4]].pack('H*').unpack1(endian2).to_f / 10
+    placedWidth = (placedWidthInverted + placedWidthDirect).to_f / 2
+    xOffset = (placedWidthDirect - placedWidth) / 2
+    placedHeightInverted = (65536 - [data[24,4]].pack('H*').unpack1(endian2)).to_f / 10
+    placedHeightDirect = [data[32,4]].pack('H*').unpack1(endian2).to_f / 10
+    placedHeight = (placedHeightInverted + placedHeightDirect).to_f / 2
+    yOffset = (placedHeightDirect - placedHeight) / 2
     byteLength = [data[pixlHeaderIndex + 96,103]].pack('H*').unpack1(endian)
     imageData = data[pixlHeaderIndex + 192,byteLength * 2]
-    # only get "true" placed dimensions if they are different enough from the raw dimensions
-    if (placedWidth - width).abs > 5 && (placedHeight - height).abs > 5
-      if placedHeight > placedWidth
-        # placed dimensions aren't in same order all the time, making the higher number the width seems to work
-        placedWidth, placedHeight = placedHeight, placedWidth
-      end
-
-      # get correct placed values
-      placedWidth = placedWidth / 2 + width if placedWidth != width
-      placedHeight = placedHeight / 2 + height if placedHeight != height
+    if !xOffset.zero? || !yOffset.zero?
+      puts "(#{id}) raw: #{width}x#{height}, placed: #{placedWidth}x#{placedHeight}, offset: (#{xOffset},#{yOffset})"
+    else
+      puts "(#{id}) raw: #{width}x#{height}, placed: #{placedWidth}x#{placedHeight}"
     end
-    puts "(#{id}) raw: #{width}x#{height}, placed: #{placedWidth}x#{placedHeight}"
 
     # remove "cdcdcdcd" bytes from image data
     imageData = [imageData.sub(/\A(cdcdcdcd)+/,'')].pack('H*').bytes
@@ -135,22 +156,45 @@ if File.extname(inputFile).downcase == '.swf'
     # export image
 
     image = MiniMagick::Image.get_image_from_pixels(imagePixelMatrix,[width,height],'rgba',8,'bmp')
-    image.resize "!#{placedWidth}x#{placedHeight}" unless options[:exportraw] || width == placedWidth && height == placedHeight
-    image.write(File.join(outputDir,"#{id}.bmp")) unless options[:dryrun]
+    image.resize "!#{placedWidth}x#{placedHeight}" unless options[:exportRaw] || width == placedWidth && height == placedHeight
+    image.write(File.join(outputDir,"#{id}.bmp"))
+    FileUtils.rm(image.path)
   end
 
   puts 'no pixl tags found' unless found
-
-  FileUtils.rm(swfXml)
 else
   # import image into copy of pixl swf
+  # scale down the image for pixl tag to save space, then scale back up for shape
 
   # read image
   image = MiniMagick::Image.open(inputFile)
-  # if image.depth != 8
-  #   raise "#{File.basename(inputFile)} depth is not 8-bit"
-  # end
-  # abort "#{File.basename(inputFile)} is too large (maximum 1024x1024)" if image.width > 1024 || image.height > 1024
+
+  if options[:placedDimensions]
+    placedWidth,placedHeight = options[:placedDimensions].split('x').map(&:to_f)
+  else
+    placedWidth = image.width
+    placedHeight = image.height
+  end
+
+  if options[:noScale]
+    if !options[:force] && (image.width > 512 || image.height > 512)
+      width = [image.width,512].min
+      height = [image.height,512].min
+      warn "image is too large, scaling #{image.width}x#{image.height} to #{width}x#{height}"
+      image.resize "#{width}x#{height}!"
+      image.write image.path
+    end
+  else
+    if !options[:force] && options[:size] > 512
+      warn 'image size is higher than 512, limiting'
+      options[:size] = 512
+    end
+    minDimension = [image.width,image.height].min
+    targetSize = minDimension >= options[:size] ? options[:size] : (minDimension & ~1)
+    image.resize "#{targetSize}x#{targetSize}!"
+    image.write image.path
+  end
+
   pixels = image.get_pixels('RGBA')
   imageData = pixels.flat_map do |row|
     row.map do |pixel|
@@ -171,15 +215,15 @@ else
   # character id
   data << [65534].pack('v').unpack1('H*')
   data << '00' * 2
-  # width
-  data << [65536 - image.width * 10].pack('v').unpack1('H*')
+  # placed width
+  data << [65536 - placedWidth * 10].pack('v').unpack1('H*') # inverted
   data << 'ff' * 2
-  data << [image.width * 10].pack('v').unpack1('H*')
+  data << [placedWidth * 10].pack('v').unpack1('H*') # direct
   data << '00' * 2
-  # height
-  data << [65536 - image.height * 10].pack('v').unpack1('H*')
+  # placed height
+  data << [65536 - placedHeight * 10].pack('v').unpack1('H*') # inverted
   data << 'ff' * 2
-  data << [image.height * 10].pack('v').unpack1('H*')
+  data << [placedHeight * 10].pack('v').unpack1('H*') # direct
   data << '00' * 2
   # padding
   data << 'cd' * 16
@@ -226,58 +270,120 @@ else
 
   pixlSwf = File.join(__dir__,'swf','pixl.swf')
   abort 'swf/pixl.swf missing in script directory' unless File.exist?(pixlSwf)
-  swfXml = Tempfile.create(['','.xml'])
-  outputSwf = Tempfile.create(['','.swf'])
-  FileUtils.cp(pixlSwf,outputSwf)
+  tempXml = Tempfile.create(['','.xml'])
+  at_exit do
+    tempXml.close
+    File.unlink(tempXml)
+  end
+  tempSwf = Tempfile.create(['','.swf'])
+  at_exit do
+    tempSwf.close
+    File.unlink(tempSwf)
+  end
+  FileUtils.cp(pixlSwf,tempSwf)
 
-  # convert image to jpg for ffdec import
-  Tempfile.create(['','.bmp']) do |file|
+  # convert image to png for ffdec import
+  Tempfile.create(['','.png']) do |file|
     MiniMagick.convert do |cmd|
-      cmd << "#{inputFile}[0]"
-      # cmd.quality('20')
-      # cmd.resize('512x512!')
+      cmd << "#{image.path}[0]"
       cmd << file.path
     end
-    system(ffdec,'-replace',outputSwf.path,outputSwf.path,'65531',file.path)
+    abort 'error: ffdec failed' unless system(ffdec,'-replace',tempSwf.path,tempSwf.path,'65531',file.path)
   end
 
   # get XML for editing shape & pixl tags
-  system(ffdec,'-swf2xml',outputSwf.path,swfXml.path)
-  doc = Nokogiri::XML(File.read(swfXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
+  abort 'error: ffdec failed' unless system(ffdec,'-swf2xml',tempSwf.path,tempXml.path)
+  doc = Nokogiri::XML(File.read(tempXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
 
-  # edit XML
   tags = doc.at_xpath('//tags')
-  # shape
+  # make shape place image, centered & scaled to placed dimensions
   shape = tags.at_xpath("//item[@type='DefineShapeTag']")
   shapeBounds = shape.at_xpath('//shapeBounds')
-  shapeBounds['Xmin'] = image.width * -10
-  shapeBounds['Xmax'] = image.width * 10
-  shapeBounds['Ymin'] = image.height * -10
-  shapeBounds['Ymax'] = image.height * 10
+  shapeBounds['Xmin'] = (placedWidth * -10).to_i
+  shapeBounds['Xmax'] = (placedWidth * 10).to_i
+  shapeBounds['Ymin'] = (placedHeight * -10).to_i
+  shapeBounds['Ymax'] = (placedHeight * 10).to_i
   bitmapMatrix = shape.at_xpath('//shapes/fillStyles/fillStyles/item[last()]/bitmapMatrix')
-  bitmapMatrix['translateX'] = image.width * -10
-  bitmapMatrix['translateY'] = image.height * -10
+  bitmapMatrix['translateX'] = (placedWidth * -10).to_i
+  bitmapMatrix['translateY'] = (placedHeight * -10).to_i
+  bitmapMatrix['scaleX'] = (placedWidth.to_f / image.width) * 20
+  bitmapMatrix['scaleY'] = (placedHeight.to_f / image.height) * 20
   styleChangeRecord = shape.at_xpath("//shapes/shapeRecords/item[@type='StyleChangeRecord']")
-  styleChangeRecord['moveDeltaX'] = image.width * -10
-  styleChangeRecord['moveDeltaY'] = image.height * -10
-  straightEdgeRecords = shape.xpath("//shapes/shapeRecords/item[@type='StraightEdgeRecord']")
-  straightEdgeRecords[0]['deltaX'] = image.width * 20
-  straightEdgeRecords[1]['deltaY'] = image.height * 20
-  straightEdgeRecords[2]['deltaX'] = image.width * -20
-  straightEdgeRecords[3]['deltaY'] = image.height * -20
-  # pixl
-  tags.at_xpath("//item[@type='UnknownTag']")['unknownData'] = data
+  styleChangeRecord['moveDeltaX'] = (placedWidth * -10).to_i
+  styleChangeRecord['moveDeltaY'] = (placedHeight * -10).to_i
 
-  File.write(swfXml,doc.to_xml(indent:2,indent_text:'  ').gsub(%r{</item><item},"</item>\n  <item"))
+  # split straight edge records to avoid exceeding max edge length
+  def splitEdge(delta)
+    return [delta] if delta.abs <= 32767
 
-  # create output swf in output directory
-  unless options[:dryrun]
-    system(ffdec,'-xml2swf',swfXml.path,outputSwf.path)
-    FileUtils.cp(outputSwf,File.join(outputDir,"#{File.basename(inputFile,'.*')}.swf"))
+    numSegments = (delta.abs.to_f / 32767).ceil
+    segmentSize = (delta.abs.to_f / numSegments).round
+    sign = delta <=> 0
+
+    segments = Array.new(numSegments - 1,sign * segmentSize)
+    remainder = delta.abs - segmentSize * (numSegments - 1)
+    segments << sign * remainder
+    segments
   end
 
-  swfXml.close
-  File.unlink(swfXml.path)
-  outputSwf.close
-  File.unlink(outputSwf.path)
+  straightEdgeRecords = shape.xpath("//shapes/shapeRecords/item[@type='StraightEdgeRecord']")
+  segments = [
+    splitEdge((placedWidth * 20).to_i), # right
+    splitEdge((placedHeight * 20).to_i), # down
+    splitEdge((placedWidth * -20).to_i), # left
+    splitEdge((placedHeight * -20).to_i) # up
+  ]
+  shapeRecords = shape.at_xpath('//shapes/shapeRecords')
+  segments.each_with_index do |directionSegments,edgeIndex|
+    straightEdgeRecords[edgeIndex]['deltaX'] = directionSegments[0] if edgeIndex.even?
+    straightEdgeRecords[edgeIndex]['deltaY'] = directionSegments[0] if edgeIndex.odd?
+    straightEdgeRecords[edgeIndex]['numBits'] = Math.log2(directionSegments[0].abs + 1).ceil + 1
+    directionSegments[1..].each do |segment|
+      newRecord = Nokogiri::XML::Element.new('item',shapeRecords.document)
+      newRecord['type'] = 'StraightEdgeRecord'
+      newRecord['generalLineFlag'] = segment >= 0 ? 'false' : 'true'
+      newRecord['numBits'] = Math.log2(segment.abs + 1).ceil + 1
+      newRecord['vertLineFlag'] = edgeIndex.odd? ? 'true' : 'false'
+      if edgeIndex.even?
+        newRecord['deltaX'] = segment
+        newRecord['deltaY'] = 0
+      else
+        newRecord['deltaX'] = 0
+        newRecord['deltaY'] = segment
+      end
+      straightEdgeRecords[edgeIndex].add_next_sibling(newRecord)
+    end
+  end
+
+  tags.at_xpath("//item[@type='UnknownTag']")['unknownData'] = data
+
+  # apply offset to pixl sprite if specified
+  if options[:placedOffset]
+    xOffset,yOffset = options[:placedOffset].split(',').map(&:to_f)
+
+    sprite = tags.at_xpath("//item[@type='DefineSpriteTag'][@spriteId='65535']")
+    return unless sprite
+
+    placeObjectNodes = sprite.xpath(".//item[@type='PlaceObject2Tag']")
+    placeObjectNodes.each do |node|
+      node['placeFlagHasMatrix'] = 'true'
+      # create matrix
+      matrix = node.at_xpath('./matrix') || Nokogiri::XML::Element.new('matrix',doc)
+      matrix['type'] = 'MATRIX'
+      matrix['hasScale'] = true
+      matrix['scaleX'] = 1.0
+      matrix['scaleY'] = 1.0
+      matrix['hasRotate'] = true
+      matrix['rotateSkew0'] = 0.0
+      matrix['rotateSkew1'] = 0.0
+      matrix['translateX'] = (xOffset * 20).to_i
+      matrix['translateY'] = (yOffset * 20).to_i
+      node.add_child(matrix) unless node.at_xpath('matrix')
+    end
+  end
+
+  File.write(tempXml,doc.to_xml(indent:2,indent_text:'  ').gsub(%r{</item><item},"</item>\n  <item"))
+
+  abort 'error: ffdec failed' unless system(ffdec,'-xml2swf',tempXml.path,tempSwf.path)
+  FileUtils.cp(tempSwf,File.join(outputDir,"#{File.basename(inputFile,'.*')}.swf"))
 end

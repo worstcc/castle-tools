@@ -39,7 +39,7 @@ abort "usage: #{File.basename($PROGRAM_NAME)} [image|swf] [output directory]" if
 
 inputFile = File.expand_path(ARGV[0])
 abort "error: #{File.basename(inputFile)} not found" unless File.exist?(inputFile)
-abort "error: #{File.basename(inputFile)} is not a bmp|swf" unless ['.bmp','.swf'].include?(File.extname(inputFile).downcase)
+abort "error: #{File.basename(inputFile)} is not an accepted image or swf" unless ['.bmp','.jpg','.jpeg','.png','.gif','.webp','.swf'].include?(File.extname(inputFile).downcase)
 
 outputDir = File.expand_path(ARGV[1])
 abort "error: #{outputDir} not found" unless Dir.exist?(outputDir)
@@ -226,11 +226,21 @@ else
 
   pixlSwf = File.join(__dir__,'swf','pixl.swf')
   abort 'swf/pixl.swf missing in script directory' unless File.exist?(pixlSwf)
-  swfXml = Tempfile.new(['','.xml'])
-  outputSwf = Tempfile.new(['','.swf'])
+  swfXml = Tempfile.create(['','.xml'])
+  outputSwf = Tempfile.create(['','.swf'])
   FileUtils.cp(pixlSwf,outputSwf)
 
-  system(ffdec,'-replace',outputSwf.path,outputSwf.path,'65531',inputFile.to_s)
+  # convert image to jpg for ffdec import
+  Tempfile.create(['','.bmp']) do |file|
+    MiniMagick.convert do |cmd|
+      cmd << "#{inputFile}[0]"
+      # cmd.quality('20')
+      # cmd.resize('512x512!')
+      cmd << file.path
+    end
+    system(ffdec,'-replace',outputSwf.path,outputSwf.path,'65531',file.path)
+  end
+
   # get XML for editing shape & pixl tags
   system(ffdec,'-swf2xml',outputSwf.path,swfXml.path)
   doc = Nokogiri::XML(File.read(swfXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
@@ -265,4 +275,9 @@ else
     system(ffdec,'-xml2swf',swfXml.path,outputSwf.path)
     FileUtils.cp(outputSwf,File.join(outputDir,"#{File.basename(inputFile,'.*')}.swf"))
   end
+
+  swfXml.close
+  File.unlink(swfXml.path)
+  outputSwf.close
+  File.unlink(outputSwf.path)
 end

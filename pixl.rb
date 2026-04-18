@@ -29,6 +29,7 @@ OptionParser.new do |opts|
   opts.on('-n','--noScale','import: don\'t scale down image (greatly increases file size)') { options[:noScale] = true }
   opts.on('-f','--noSizeLimit','import: allow image size larger than 512 (not recommended, will cause issues)') { options[:force] = true }
   opts.on('-r','--raw','export: use raw image dimensions instead of placed dimensions') { options[:exportRaw] = true }
+  opts.on('-x','--xml','import: create a xml file instead of swf') { options[:xml] = true }
 end.parse!
 options[:format] = 'steam' unless options[:format]
 options[:size] = 512 unless options[:size]
@@ -384,6 +385,10 @@ else
 
   File.write(tempXml,doc.to_xml(indent:2,indent_text:'  ').gsub(%r{</item><item},"</item>\n  <item"))
 
-  abort 'error: ffdec failed' unless system(ffdec,'-xml2swf',tempXml.path,tempSwf.path)
-  FileUtils.cp(tempSwf,File.join(outputDir,"#{File.basename(inputFile,'.*')}.swf"))
+  if options[:xml]
+    FileUtils.cp(tempXml,File.join(outputDir,"#{File.basename(inputFile,'.*')}.xml"))
+  else
+    abort 'error: ffdec failed' unless system(ffdec,'-xml2swf',tempXml.path,tempSwf.path)
+    FileUtils.cp(tempSwf,File.join(outputDir,"#{File.basename(inputFile,'.*')}.swf"))
+  end
 end

@@ -9,38 +9,31 @@ def fixMalformedPixlTags(tags)
   # on each copy/move, JPEXS adds 6 bytes at the start & removes 6 bytes at the end
   # tag can be recovered 2 copies deep, 2+ then image data is lost
   # identify tag header through two pairs of "ffff" that are always the same distance relatively
+  i = 0
   tags.reject! do |tag|
+    i += 1
     next unless tag['unknownData']
 
-    ret = 0
     data = tag['unknownData']
-    ffOffset = 0
-    prev = nil
-    while (index = data.index('ffff',ffOffset))
-      if prev && (index - prev == 16)
-        if prev > 36 # 2+ copies deep
-          id = [data[prev - 12,prev - 8]].pack('H*').unpack1('V').to_s
-          puts "warning: unrecoverable pixl tag, removing (id=#{id})"
-          ret = 2
-        elsif prev > 12
-          # header (remove)
-          data = data[prev - 12..]
-          # footer (add)
-          case prev
-          when 24
-            data << '000003000000'
-          when 36
-            data << '280000003000000003000000'
-          end
-          tag['unknownData'] = data
-          ret = 1
-        end
-        break
-      end
-      prev = index
-      ffOffset = index + 4
+    next unless data.index('4c584950')
+
+    footer = data[-32..]
+    next if footer.end_with?('24000000280000003000000003000000')
+
+    if footer.end_with?('24000000280000003000')
+      data = data[12..]
+      data << '000003000000'
+      tag['unknownData'] = data
+      next
+    elsif footer.end_with?('24000000')
+      data = data[24..]
+      data << '280000003000000003000000'
+      tag['unknownData'] = data
+      next
+    else
+      puts "warning: unrecoverable pixl tag, removing (pixl ##{i})"
+      true
     end
-    ret == 2
   end
 end
 

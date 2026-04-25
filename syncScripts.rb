@@ -5,18 +5,6 @@ require 'tempfile'
 require 'json'
 require 'digest'
 
-def findFFDec
-  ffdecPath = nil
-  if RUBY_PLATFORM =~ /mswin|mingw|jruby/
-    ffdecPath = 'C:\\Program Files (x86)\\FFDec\\ffdec-cli.exe'
-  elsif RUBY_PLATFORM =~ /linux/
-    ffdecPath = '/usr/bin/ffdec'
-    ffdecPath = `which ffdec`.strip unless File.exist?(ffdecPath)
-  end
-  abort 'error: JPEXS not found' if ffdecPath.nil? || !File.exist?(ffdecPath)
-  ffdecPath
-end
-
 def readMetadata(dir)
   metaFile = File.join(dir,'metadata.json')
   return nil unless File.exist?(metaFile)
@@ -61,73 +49,117 @@ def typeKey(path,root)
   keyParts.flatten.join('/')
 end
 
-def normalizeTokens(file)
-  File.read(file)
-      .gsub(%r{//.*?$}, '') # line comments
-      .gsub(%r{/\*.*?\*/}m, '') # block comments
-      .gsub(/var\s+\w+[^;]*;/, '') # var declarations
-      .scan(/\b[a-zA-Z_]\w*|\d+\b/) # identifiers/literals
-end
-
-def clipEventType(file)
-  File.read(file)[/onClipEvent\s*\(\s*(\w+)\s*\)/,1]
-end
-
-def shortScript?(file)
-  File.readlines(file).count { |l| l.strip != '' } <= 6
-end
-
-def stringLiterals(file)
-  File.read(file).scan(/'(?:\\.|[^'])*'|'(?:\\.|[^'])*'/).to_set
-end
-
-def anchors(file)
-  File.read(file)
-      .scan(/(?:_root|_parent|this)(?:\.[a-zA-Z_]\w*)+/)
-      .to_set
-end
-
-def blankScript?(file)
-  File.read(file)
-      .gsub(%r{//.*?$},'') # line comments
-      .gsub(%r{/\*.*?\*/}m,'') # block comments
-      .strip
-      .empty?
-end
-
 def jaccard(a,b)
   return 0.0 if a.empty? || b.empty?
 
   (a & b).size.to_f / (a | b).size
 end
 
-def similarity(a,b)
-  blankA = blankScript?(a)
-  blankB = blankScript?(b)
+def multiSetJaccard(a,b)
+  return 0.0 if a.empty? || b.empty?
+
+  fa = a.tally
+  fb = b.tally
+
+  keys = fa.keys | fb.keys
+
+  inter = keys.sum { |k| [fa[k].to_i,fb[k].to_i].min }
+  union = keys.sum { |k| [fa[k].to_i,fb[k].to_i].max }
+
+  inter.to_f / union
+end
+
+def tokenBigrams(tokens)
+  tokens.each_cons(2).map { |a,b| "#{a}_#{b}" }
+end
+
+def preProcessScript(file)
+  content = File.read(file)
+  noComments = content.gsub(%r{//.*?$}, '')
+                      .gsub(%r{/\*.*?\*/}m, '')
+
+  normalized = noComments
+               .gsub(/\b0x[0-9A-Fa-f]+\b/) { |hex| hex.to_i(16).to_s } # hex to decimal
+               .gsub(/\bfor\s*\(/,'loop(') # for loops
+               .gsub(/\bwhile\s*\(/,'loop(') # while loops
+               .gsub(/\bltemp\d+\b/,'tmp') # local/temp variable names
+               .gsub(/\b_loc\d+\b/,'tmp')
+               .gsub(/var\s+\w+\s*=\s*([^;]+);/,'\1;') # var declarations
+               .gsub(/var\s+\w+[^;]*;/, '')
+
+  { raw: content, clean: noComments, tokens: normalized.scan(/\b[a-zA-Z_]\w*|\d+\b/) }
+end
+
+def functionSignaturesFrom(clean)
+  clean.scan(/function\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)/)
+       .map { |name,params| "#{name}(#{params.gsub(/\s+/,'')})" }
+       .to_set
+end
+
+def stringLiteralsFrom(raw)
+  raw.scan(/'(?:\\.|[^'])*'|'(?:\\.|[^'])*'/).to_set
+end
+
+def anchorsFrom(raw)
+  raw.scan(/(?:_root|_parent|this)(?:\.[a-zA-Z_]\w*)+/).to_set
+end
+
+def clipEventTypeFrom(raw)
+  raw[/onClipEvent\s*\(\s*(\w+)\s*\)/,1]
+end
+
+def structuralTokens(tokens)
+  tokens.map do |token|
+    if token =~ /^\d+$/
+      'num'
+    elsif %w[true false].include?(token)
+      'bool'
+    else
+      token
+    end
+  end
+end
+
+def structuralScore(a,b)
+  scoreA = structuralTokens(a)
+  scoreB = structuralTokens(b)
+  jaccard(scoreA.to_set,scoreB.to_set)
+end
+
+def similarity(pA,pB)
+  # abort on script type mismatch
+  clipEventTypeA = clipEventTypeFrom(pA[:raw])
+  clipEventTypeB = clipEventTypeFrom(pB[:raw])
+  return 0.0 if clipEventTypeA && clipEventTypeB && clipEventTypeA != clipEventTypeB
 
   # blank handling (directional)
+  blankA = pA[:clean].strip.empty?
+  blankB = pB[:clean].strip.empty?
   return 0.0 if blankA && !blankB
   return 0.2 if !blankA && blankB
   return 0.2 if blankA && blankB
 
-  # hard stop on script type mismatch
-  ea = clipEventType(a)
-  eb = clipEventType(b)
-  return 0.0 if ea && eb && ea != eb
+  tokensA = pA[:tokens]
+  tokensB = pB[:tokens]
+  tokenScore = multiSetJaccard(tokensA,tokensB)
 
-  tokensA = normalizeTokens(a).to_set
-  tokensB = normalizeTokens(b).to_set
-  anchorsA = anchors(a)
-  anchorsB = anchors(b)
-  stringsA = stringLiterals(a)
-  stringsB = stringLiterals(b)
+  bigramsA = tokenBigrams(tokensA).to_set
+  bigramsB = tokenBigrams(tokensB).to_set
+  bigramScore = jaccard(bigramsA,bigramsB)
 
-  tokenScore = jaccard(tokensA,tokensB)
+  signaturesA = functionSignaturesFrom(pA[:clean])
+  signaturesB = functionSignaturesFrom(pB[:clean])
+  signatureScore = jaccard(signaturesA,signaturesB)
+
+  anchorsA = anchorsFrom(pA[:raw])
+  anchorsB = anchorsFrom(pB[:raw])
   anchorScore = anchorsA.empty? && anchorsB.empty? ? 0.0 : jaccard(anchorsA,anchorsB)
+
+  stringsA = stringLiteralsFrom(pA[:raw])
+  stringsB = stringLiteralsFrom(pB[:raw])
   stringScore = stringsA.empty? && stringsB.empty? ? 0.0 : jaccard(stringsA,stringsB)
 
-  # score
-  0.50 * tokenScore + 0.30 * anchorScore + 0.20 * stringScore
+  0.35 * tokenScore + 0.25 * bigramScore + 0.15 * signatureScore + 0.1 * anchorScore + 0.1 * stringScore
 end
 
 def structureFingerprint(scripts)
@@ -191,69 +223,118 @@ unless options[:forceSync]
   end
 end
 
-ffdec = findFFDec
+def commandExists?(cmd)
+  path = if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
+           `where.exe #{cmd}`.split("\n").first
+         else
+           `which #{cmd}`.strip
+         end
+  path.empty? ? false : path
+end
+
+ffdec = nil
+if RUBY_PLATFORM =~ /mswin|mingw|jruby/
+  ffdec = 'C:\\Program Files (x86)\\FFDec\\ffdec-cli.exe'
+elsif RUBY_PLATFORM =~ /linux/
+  ffdec = commandExists?('ffdec')
+end
+abort 'error: jpexs is not installed' if ffdec.nil? || !File.exist?(ffdec)
 
 # initial export
 unless Dir.exist?(dir)
   abort 'error: deobfuscating swf failed' unless system(RbConfig.ruby,DEOBFUSCATESWF,swf.to_s)
-  system(ffdec,'-timeout','9999','-exportTimeout','9999','-export','script',dir.to_s,swf.to_s)
+  system(ffdec,'-timeout','9999','-exportTimeout','9999','-export','script',dir.to_s,swf.to_s,out: File::NULL,err: File::NULL)
 end
 
 # sync
 unless options[:skipStructure]
   tempDir = Dir.mktmpdir
-  system(ffdec,'-timeout','9999','-exportTimeout','9999','-export','script',tempDir.to_s,swf.to_s)
+  system(ffdec,'-timeout','9999','-exportTimeout','9999','-export','script',tempDir.to_s,swf.to_s,out: File::NULL,err: File::NULL)
 
   currentScripts = collectScripts(File.join(dir,'scripts'))
   tempScripts = collectScripts(File.join(tempDir,'scripts'))
   currentStructure = structureFingerprint(dir)
   tempStructure = structureFingerprint(tempDir)
   structureIdentical = currentStructure == tempStructure
-  currentScripts.each do |type,sources|
-    targets = tempScripts[type]
-    next unless targets && !targets.empty?
+  if structureIdentical
+    currentScripts.each do |type,sources|
+      targets = tempScripts[type]
+      next unless targets && !targets.empty?
 
-    # sort by path ascending
-    sortedSources = sources.sort
-    sortedTargets = targets.sort
+      sortedSources = sources.sort
+      sortedTargets = targets.sort
 
-    used = {}
+      # build lookup map
+      targetMap = {}
+      sortedTargets.each do |target|
+        targetMap[relPath(target,tempDir)] = target
+      end
 
-    sortedSources.each do |src|
-      if structureIdentical
-        # structure hasn't changed, match 1:1
-        srcRel = relPath(src,dir)
-        dest = sortedTargets.find do |script|
-          !used[script] && relPath(script,tempDir) == srcRel
-        end
-        if dest
-          FileUtils.cp(src,dest)
-          used[dest] = true
-        end
-      else
-        # structure has changed, match scripts to most similar script
+      used = {}
+      sortedSources.each do |source|
+        sourceRelative = relPath(source,dir)
+        destination = targetMap[sourceRelative]
+        next if destination.nil? || used[destination]
+
+        FileUtils.cp(source,destination)
+        used[destination] = true
+      end
+    end
+  else
+    currentData = {}
+    tempData = {}
+
+    currentScripts.values.flatten.each do |file|
+      currentData[file] = preProcessScript(file)
+    end
+    tempScripts.values.flatten.each do |file|
+      tempData[file] = preProcessScript(file)
+    end
+
+    currentScripts.each do |type,sources|
+      targets = tempScripts[type]
+      next unless targets && !targets.empty?
+
+      sortedSources = sources.sort
+      sortedTargets = targets.sort
+
+      used = {}
+
+      sortedSources.each do |source|
         best = nil
         bestScore = -1.0
 
-        sortedTargets.each do |dest|
-          next if used[dest]
+        lengthA = currentData[source][:tokens].length
 
-          score = similarity(src,dest)
-          # puts "comparing #{src.split(File::SEPARATOR)[src.split(File::SEPARATOR).index('scripts') + 1..].join(File::SEPARATOR)} with #{dest.split(File::SEPARATOR)[dest.split(File::SEPARATOR).index('scripts') + 1..].join(File::SEPARATOR)} (#{score})"
+        # prune candidates by size ratio
+        candidates = sortedTargets.select do |destination|
+          next false if used[destination]
+
+          lengthB = tempData[destination][:tokens].length
+          next false if lengthA.zero? || lengthB.zero?
+
+          ratio = lengthA > lengthB ? lengthA.to_f / lengthB : lengthB.to_f / lengthA
+          ratio < 3.0
+        end
+
+        candidates.each do |destination|
+          score = similarity(currentData[source],tempData[destination])
+
           if score > bestScore
-            best = dest
+            best = destination
             bestScore = score
           end
         end
 
         next unless best
 
-        # puts "best: #{src} (#{bestScore})"
-        minScore = shortScript?(src) || shortScript?(best) ? 0.60 : 0.45
-        next unless bestScore >= minScore
+        next unless bestScore >= 0.5
 
-        puts "matching #{src.split(File::SEPARATOR)[src.split(File::SEPARATOR).index('scripts') + 1..].join(File::SEPARATOR)} with #{best.split(File::SEPARATOR)[best.split(File::SEPARATOR).index('scripts') + 1..].join(File::SEPARATOR)} (#{bestScore})"
-        FileUtils.cp(src,best)
+        sourceRelative = relPath(source,dir)
+        destinationRelative = relPath(best,tempDir)
+        puts "#{sourceRelative} -> #{destinationRelative} (#{bestScore})" unless sourceRelative == destinationRelative
+
+        FileUtils.cp(source,best)
         used[best] = true
       end
     end

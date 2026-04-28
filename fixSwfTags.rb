@@ -177,17 +177,43 @@ def getTagDependencies(tag,allTags,idToTag,visited = Set.new)
 end
 
 def topologicalSort(frame,allTags,idToTag)
-  # build dependency graph for the frame
   graph = Hash.new { |h,k| h[k] = [] }
   frame.each do |tag|
     graph[tag] = getTagDependencies(tag,allTags,idToTag).select { |dep| frame.include?(dep) }
   end
 
-  # topological sort
+  depthCache = {}
+  depth = lambda do |tag|
+    depthCache[tag] ||= begin
+      dependencies = graph[tag]
+      dependencies.map { |dependency| depth.call(dependency) }.max.to_i + 1
+    end
+  end
+
   visited = Set.new
   result = []
+  anchorTypes = %w[RemoveObject2Tag ShowFrameTag DoAction ExportAssetsTag]
+  segments = []
+  current = []
   frame.each do |tag|
-    dfs(tag,graph,visited,result,frame)
+    if anchorTypes.include?(tag['type'])
+      segments << current unless current.empty?
+      segments << [tag]
+      current = []
+    else
+      current << tag
+    end
+  end
+  segments << current unless current.empty?
+
+  segments.each do |segment|
+    if segment.length == 1 && anchorTypes.include?(segment[0]['type'])
+      result << segment[0]
+      next
+    end
+    segment.sort_by { |tag| - depth.call(tag) }.each do |tag|
+      dfs(tag,graph,visited,result,frame)
+    end
   end
 
   # ensure ShowFrameTag is last if present
@@ -418,7 +444,7 @@ tags.each do |tag|
   frameGroups[targetFrame] << tag
 end
 
-# sort tags by dependencies
+# sort tags to mimic flash export layout
 sortedTags = []
 frameGroups.each do |frame|
   sortedFrame = topologicalSort(frame,tags,idToTag)

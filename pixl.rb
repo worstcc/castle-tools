@@ -29,7 +29,7 @@ OptionParser.new do |opts|
   opts.on('-n','--noScale','import: don\'t scale down image (greatly increases file size)') { options[:noScale] = true }
   opts.on('-f','--noSizeLimit','import: allow image size larger than 512 (not recommended, will cause issues)') { options[:force] = true }
   opts.on('-r','--raw','export: use raw image dimensions instead of placed dimensions') { options[:exportRaw] = true }
-  opts.on('-x','--xml','import: create a xml file instead of swf') { options[:xml] = true }
+  opts.on('-x','--printData','import: print unknownData of pixl tag instead of outputting to swf') { options[:xml] = true }
 end.parse!
 options[:format] = 'steam' unless options[:format]
 options[:size] = 512 unless options[:size]
@@ -167,6 +167,81 @@ else
   # import image into copy of pixl swf
   # scale down the image for pixl tag to save space, then scale back up for shape
 
+  def imageToPixl(image,placedWidth,placedHeight)
+    imageData = image.get_pixels('RGBA').flat_map do |row|
+      row.map do |pixel|
+        r,g,b,a = pixel
+        # for transparent images to render properly the RGB values need to be multiplied by A (0.0 to 1.0)
+        alpha = a / 255.0
+        r2 = (r * alpha).round
+        g2 = (g * alpha).round
+        b2 = (b * alpha).round
+        [b2,g2,r2,a].pack('C4').unpack1('H*')
+      end
+    end.join
+
+    data = ''
+
+    # swf header
+
+    # character id
+    data << [65534].pack('v').unpack1('H*')
+    data << '00' * 2
+    # placed width
+    data << [65536 - placedWidth * 10].pack('v').unpack1('H*') # inverted
+    data << 'ff' * 2
+    data << [placedWidth * 10].pack('v').unpack1('H*') # direct
+    data << '00' * 2
+    # placed height
+    data << [65536 - placedHeight * 10].pack('v').unpack1('H*') # inverted
+    data << 'ff' * 2
+    data << [placedHeight * 10].pack('v').unpack1('H*') # direct
+    data << '00' * 2
+    # padding
+    data << 'cd' * 16
+
+    # pixl header
+
+    data << '4c584950'
+    data << '00' * 12
+    # width
+    data << [image.width].pack('V').unpack1('H*')
+    # height
+    data << [image.height].pack('V').unpack1('H*')
+    # planes
+    data << [1].pack('V').unpack1('H*')
+    # bitcount
+    data << [32].pack('V').unpack1('H*')
+    # compression
+    data << [0].pack('V').unpack1('H*')
+    # ?
+    data << '60000000'
+    # x pixels per meter
+    data << [2835].pack('V').unpack1('H*')
+    # y pixels per meter
+    data << [2835].pack('V').unpack1('H*')
+    # image length
+    data << [imageData.length / 2].pack('V').unpack1('H*')
+    # ?
+    data << '01000000' * 2
+    # width/height/width/height
+    data << [image.width].pack('V').unpack1('H*')
+    data << [image.height].pack('V').unpack1('H*')
+    data << [image.width].pack('V').unpack1('H*')
+    data << [image.height].pack('V').unpack1('H*')
+    data << 'cd' * 4
+    # character id
+    data << [65534].pack('v').unpack1('H*')
+    data << '00' * 14
+
+    # image data
+    data << imageData
+    # footer
+    data << '24000000280000003000000003000000'
+
+    data
+  end
+
   # read image
   image = MiniMagick::Image.open(inputFile)
 
@@ -196,76 +271,10 @@ else
     image.write image.path
   end
 
-  pixels = image.get_pixels('RGBA')
-  imageData = pixels.flat_map do |row|
-    row.map do |pixel|
-      r,g,b,a = pixel
-      # for transparent images to render properly the RGB values need to be multiplied by A (0.0 to 1.0)
-      alpha = a / 255.0
-      r2 = (r * alpha).round
-      g2 = (g * alpha).round
-      b2 = (b * alpha).round
-      [b2,g2,r2,a].pack('C4').unpack1('H*')
-    end
-  end.join
-
-  # create pixl tag
-  data = ''
-  # swf header
-
-  # character id
-  data << [65534].pack('v').unpack1('H*')
-  data << '00' * 2
-  # placed width
-  data << [65536 - placedWidth * 10].pack('v').unpack1('H*') # inverted
-  data << 'ff' * 2
-  data << [placedWidth * 10].pack('v').unpack1('H*') # direct
-  data << '00' * 2
-  # placed height
-  data << [65536 - placedHeight * 10].pack('v').unpack1('H*') # inverted
-  data << 'ff' * 2
-  data << [placedHeight * 10].pack('v').unpack1('H*') # direct
-  data << '00' * 2
-  # padding
-  data << 'cd' * 16
-
-  # PIXL header
-  data << '4c584950'
-  data << '00' * 12
-  # width
-  data << [image.width].pack('V').unpack1('H*')
-  # height
-  data << [image.height].pack('V').unpack1('H*')
-  # planes
-  data << [1].pack('V').unpack1('H*')
-  # bitcount
-  data << [32].pack('V').unpack1('H*')
-  # compression
-  data << [0].pack('V').unpack1('H*')
-  # ?
-  data << '60000000'
-  # x pixels per meter
-  data << [2835].pack('V').unpack1('H*')
-  # y pixels per meter
-  data << [2835].pack('V').unpack1('H*')
-  # image length
-  data << [imageData.length / 2].pack('V').unpack1('H*')
-  # ?
-  data << '01000000' * 2
-  # width/height/width/height
-  data << [image.width].pack('V').unpack1('H*')
-  data << [image.height].pack('V').unpack1('H*')
-  data << [image.width].pack('V').unpack1('H*')
-  data << [image.height].pack('V').unpack1('H*')
-  data << 'cd' * 4
-  # character id
-  data << [65534].pack('v').unpack1('H*')
-  data << '00' * 14
-
-  # image data
-  data << imageData
-  # footer
-  data << '24000000280000003000000003000000'
+  if options[:xml]
+    puts imageToPixl(image,placedWidth,placedHeight)
+    exit 0
+  end
 
   # import image
 
@@ -356,7 +365,7 @@ else
     end
   end
 
-  tags.at_xpath("//item[@type='UnknownTag']")['unknownData'] = data
+  tags.at_xpath("//item[@type='UnknownTag']")['unknownData'] = imageToPixl(image,placedWidth,placedHeight)
 
   # apply offset to pixl sprite if specified
   if options[:placedOffset]

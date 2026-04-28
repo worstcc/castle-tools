@@ -81,7 +81,7 @@ SWFSRCDIR = File.join(SRCDIR,'src')
 SWFDIR = File.join(SRCDIR,'swf')
 
 # abort if no source directories found or only src directory exists
-abort 'error: source directory does not contain the expected directories' if (!Dir.exist?(AUDIODIR) || !Dir.exist?(FONTSDIR) || !Dir.exist?(SWFSRCDIR) || !Dir.exist?(SWFDIR)) || (Dir.exist?(SWFSRCDIR) && !Dir.exist?(AUDIODIR) && !Dir.exist?(FONTSDIR) && !Dir.exist?(SWFDIR))
+abort 'error: source directory does not contain the expected directories' if (!Dir.exist?(AUDIODIR) && !Dir.exist?(FONTSDIR) && !Dir.exist?(SWFSRCDIR) && !Dir.exist?(SWFDIR)) || (Dir.exist?(SWFSRCDIR) && !Dir.exist?(AUDIODIR) && !Dir.exist?(FONTSDIR) && !Dir.exist?(SWFDIR))
 
 # get data directory
 unless OPTIONS[:sync]
@@ -223,10 +223,10 @@ def processBsps!
   bspDir = File.join(DATADIR,'bsps')
   FileUtils.mkdir(bspDir)
 
-  system(RbConfig.ruby,BSPRB,'-n',BLANKBSPNAME,'--blank',bspDir,out: File::NULL,err: File::NULL)
+  system(RbConfig.ruby,BSPRB,'-n',BLANKBSPNAME,'--blank',bspDir,out: File::NULL,err: File::NULL) if BLANKBSP
 
   # match bsp name to their swf file then create bsp
-  Parallel.each(bspList,in_threads: Etc.nprocessors / 2) do |(bspName,srcFile)|
+  Parallel.each(bspList,in_threads: Etc.nprocessors) do |(bspName,srcFile)|
     metadataFile = findMetadataFromScript(File.dirname(srcFile))
     unless metadataFile
       warn "(bsp) scripts directory not found for #{truncatePath(srcFile)}, skipping"
@@ -243,6 +243,8 @@ def processBsps!
 
     system(RbConfig.ruby,BSPRB,'-a','-n',bspName,swfFile,bspDir,out: File::NULL,err: File::NULL)
   end
+
+  FileUtils.rm_r(bspDir) if Dir.empty?(bspDir)
 end
 
 def findMetadataForSwf(swfName)
@@ -406,7 +408,7 @@ def processAudio!
   FileUtils.mkdir(musicDir)
   FileUtils.mkdir(soundsDir)
 
-  Parallel.each(audioFiles,in_threads: Etc.nprocessors / 2) do |audioFile|
+  Parallel.each(audioFiles,in_threads: Etc.nprocessors) do |audioFile|
     filename = File.basename(audioFile)
     if filename =~ /sound/i
       system(RbConfig.ruby,CONVERTAUDIORB,audioFile,soundsDir)

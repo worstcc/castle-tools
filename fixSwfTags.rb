@@ -164,6 +164,16 @@ def getTagDependencies(tag,allTags,idToTag,visited = Set.new)
       deps << definingTag
       deps.concat(getTagDependencies(definingTag,allTags,idToTag,visited))
     end
+  when 'DefineButton2Tag'
+    tag.xpath('characters/item').each do |node|
+      next unless node['type'] == 'BUTTONRECORD' && node['characterId']
+
+      definingTag = idToTag[node['characterId']]
+      next unless definingTag
+
+      deps << definingTag
+      deps.concat(getTagDependencies(definingTag,allTags,idToTag,visited))
+    end
   when 'RemoveObject2Tag'
     if tag['depth']
       depth = tag['depth']

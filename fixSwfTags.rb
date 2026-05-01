@@ -202,7 +202,7 @@ def topologicalSort(frame,allTags,idToTag)
 
   visited = Set.new
   result = []
-  anchorTypes = %w[PlaceObject2Tag RemoveObject2Tag ShowFrameTag DoAction ExportAssetsTag FrameLabelTag SetBackgroundColorTag]
+  anchorTypes = %w[PlaceObject2Tag RemoveObject2Tag ShowFrameTag DoActionTag ExportAssetsTag FrameLabelTag SetBackgroundColorTag]
   segments = []
   current = []
   frame.each do |tag|

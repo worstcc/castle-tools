@@ -37,12 +37,6 @@ def fixMalformedPixlTags(tags)
   end
 end
 
-def setHasEndTags(tags)
-  tags.each do |tag|
-    tag['hasEndTag'] = true if tag['type'] == 'DefineSpriteTag'
-  end
-end
-
 def padPixlTags
   swfData = File.binread(SWF)
   swfByteDiff = 0
@@ -342,7 +336,12 @@ tagsNode = DOC.at_xpath('//tags')
 tags = tagsNode.xpath('item').to_a
 
 fixMalformedPixlTags(tags)
-setHasEndTags(tags)
+
+# sprites: set hasEndTag to true & remove "SoundStreamHead2" tags
+tags.select { |tag| tag['type'] == 'DefineSpriteTag' }.each do |tag|
+  tag['hasEndTag'] = true
+  tag.xpath('subTags/item[@type="SoundStreamHead2Tag"]').each(&:remove)
+end
 
 showFrameIndices = tags.each_index.select { |i| tags[i]['type'] == 'ShowFrameTag' }
 

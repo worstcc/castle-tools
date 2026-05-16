@@ -338,6 +338,7 @@ tags = tagsNode.xpath('item').to_a
 fixMalformedPixlTags(tags)
 
 # sprites: set hasEndTag to true & remove "SoundStreamHead2" tags
+tags.reject! { |tag| tag['type'] == 'SoundStreamHead2Tag' }
 tags.select { |tag| tag['type'] == 'DefineSpriteTag' }.each do |tag|
   tag['hasEndTag'] = true
   tag.xpath('subTags/item[@type="SoundStreamHead2Tag"]').each(&:remove)

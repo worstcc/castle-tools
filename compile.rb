@@ -13,8 +13,10 @@ def movePak(file,dir)
          else
            File.join(dir,'game',fileName)
          end
-  FileUtils.rm(dest) if File.exist?(dest)
-  FileUtils.mv(file,dest)
+  if file != dest
+    FileUtils.rm(dest) if File.exist?(dest)
+    FileUtils.mv(file,dest)
+  end
   puts fileName
 end
 

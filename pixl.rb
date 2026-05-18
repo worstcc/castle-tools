@@ -90,14 +90,12 @@ if File.extname(inputFile).downcase == '.swf'
         next
       end
       endian = 'V' # little endian
-      endian2 = 'v'
     when 'xbla'
       if data[-32,32] != '00000024000000280000003000000003'
         puts 'invalid pixl tag'
         next
       end
       endian = 'N' # big endian
-      endian2 = 'n'
     when 'ps3'
       if data[-32,32] != '00000024000000280000003000000003'
         puts 'invalid pixl tag'
@@ -105,7 +103,6 @@ if File.extname(inputFile).downcase == '.swf'
       end
       # get pixl data
       endian = 'N'
-      endian2 = 'n'
       next if data[pixlHeaderIndex,8] == '4c584950' # odd hybrid version seen in ps3 player.swf
     end
 
@@ -114,15 +111,15 @@ if File.extname(inputFile).downcase == '.swf'
     height = [data[pixlHeaderIndex + 40,8]].pack('H*').unpack1(endian)
     id = [data[pixlHeaderIndex + 160,8]].pack('H*').unpack1(endian)
 
-    # average the inverted & direct values to get each placement dimension
-    placedWidthInverted = (65536 - [data[8,4]].pack('H*').unpack1(endian2)).to_f / 10
-    placedWidthDirect = [data[16,4]].pack('H*').unpack1(endian2).to_f / 10
-    placedWidth = (placedWidthInverted + placedWidthDirect).to_f / 2
-    xOffset = (placedWidthDirect - placedWidth) / 2
-    placedHeightInverted = (65536 - [data[24,4]].pack('H*').unpack1(endian2)).to_f / 10
-    placedHeightDirect = [data[32,4]].pack('H*').unpack1(endian2).to_f / 10
-    placedHeight = (placedHeightInverted + placedHeightDirect).to_f / 2
-    yOffset = (placedHeightDirect - placedHeight) / 2
+    # get rectangle bounds
+    xMin = [data[8,8]].pack('H*').unpack1('l<') / 10.0
+    xMax = [data[16,8]].pack('H*').unpack1('l<') / 10.0
+    yMin = [data[24,8]].pack('H*').unpack1('l<') / 10.0
+    yMax = [data[32,8]].pack('H*').unpack1('l<') / 10.0
+    placedWidth = (xMax - xMin) / 2.0
+    placedHeight = (yMax - yMin) / 2.0
+    xOffset = (xMax + xMin) / 4.0
+    yOffset = (yMax + yMin) / 4.0
     byteLength = [data[pixlHeaderIndex + 96,103]].pack('H*').unpack1(endian)
     imageData = data[pixlHeaderIndex + 192,byteLength * 2]
     if !xOffset.zero? || !yOffset.zero?
@@ -187,16 +184,11 @@ else
     # character id
     data << [65534].pack('v').unpack1('H*')
     data << '00' * 2
-    # placed width
-    data << [65536 - placedWidth * 10].pack('v').unpack1('H*') # inverted
-    data << 'ff' * 2
-    data << [placedWidth * 10].pack('v').unpack1('H*') # direct
-    data << '00' * 2
-    # placed height
-    data << [65536 - placedHeight * 10].pack('v').unpack1('H*') # inverted
-    data << 'ff' * 2
-    data << [placedHeight * 10].pack('v').unpack1('H*') # direct
-    data << '00' * 2
+    # rectangle bounds (xMin,xMax,yMin,yMax)
+    data << [(-placedWidth * 10).round].pack('l<').unpack1('H*')
+    data << [(placedWidth * 10).round].pack('l<').unpack1('H*')
+    data << [(-placedHeight * 10).round].pack('l<').unpack1('H*')
+    data << [(placedHeight * 10).round].pack('l<').unpack1('H*')
     # padding
     data << 'cd' * 16
 

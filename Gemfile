@@ -2,6 +2,7 @@ source 'https://rubygems.org'
 
 ruby '>= 3.4'
 
+gem 'git'
 gem 'mini_magick'
 gem 'nokogiri'
 gem 'parallel'

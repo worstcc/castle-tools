@@ -3,12 +3,16 @@
 require 'English'
 require 'digest'
 require 'find'
+require 'git'
 require 'json'
 require 'optparse'
 require 'parallel'
 require 'securerandom'
 require 'seven_zip_ruby'
 require 'tmpdir'
+
+# TODO: when not creating archive, a directory should be created with the mod name instead of just "data"
+# TODO: add support for changelog & readme files
 
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [source directory] [output directory]"
 options = {}
@@ -53,6 +57,12 @@ CONVERTAUDIORB = File.join(__dir__,'convertAudio.rb')
 abort 'error: convertAudio.rb not found in source directory' unless File.exist?(CONVERTAUDIORB)
 XWMAENCODE = File.join(__dir__,'xWMAEncode.exe')
 abort 'error: xWMAEncode.exe not found in script directory' unless File.exist?(XWMAENCODE)
+
+GITCURRENTCOMMIT = begin
+  Git.open(SRCDIR).log(nil).execute.size
+rescue ArgumentError
+  nil
+end
 
 def commandExists?(cmd)
   path = if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
@@ -107,9 +117,14 @@ buildJson = JSON.parse(File.read(buildFile)) if File.exist?(buildFile)
 if Dir.exist?(SWFDIR)
   SWFFILES = Dir.glob(File.join(SWFDIR,'*.swf'))
 
-  # seed random based on hash of swfs combined, so the same build produces the same random values
-  SWFFILESHASH = Digest::SHA256.hexdigest(SWFFILES.sort.map { |file| File.read(file) }.join)
-  srand(SWFFILESHASH.to_i)
+  # get hash of repository files for build differentiation & random seed
+  hashFiles = []
+  hashFiles << Dir.glob(File.join(SWFDIR,'*.swf')).sort.map { |file| File.read(file) }.join
+  hashFiles << Dir.glob(File.join(AUDIODIR,'*.{mp3,flac,ogg,aac,m4a,wav,opus}')).sort.map { |file| File.read(file) }.join if Dir.exist?(AUDIODIR)
+  hashFiles << Dir.glob(File.join(FONTSDIR,'*.{fnt,dds}')).sort.map { |file| File.read(file) }.join if Dir.exist?(FONTSDIR)
+
+  FILEHASH = Digest::SHA256.hexdigest(hashFiles.join('|'))
+  srand(FILEHASH.to_i)
 end
 
 unless OPTIONS[:sync]
@@ -132,7 +147,7 @@ unless OPTIONS[:sync]
       warn 'version not specified, using \'1.0\' as the version'
     end
   else
-    MODINFOVERSION = "dev #{Time.now.strftime('%Y-%m-%d %H:%M:%S')} (#{SWFFILESHASH[0...8]})".freeze
+    MODINFOVERSION = GITCURRENTCOMMIT ? "b#{GITCURRENTCOMMIT}-#{FILEHASH[0...8]}".freeze : FILEHASH[0...8].freeze
   end
   puts "building \"#{MODINFONAME} #{MODINFOVERSION}\""
   # get vanilla bsp/dev only whitelists
@@ -143,16 +158,14 @@ end
 # get archive file name
 if OPTIONS[:archive]
   archiveName = MODINFOVERSION.dup
-  archiveName.gsub!(/\bdev\b/,'Dev')
   archiveName.gsub!(/\s+/,'')
   archiveName.gsub!('.','_')
-  archiveName.gsub!(/(\d{4})-(\d{2})-(\d{2})/,'\1\2\3')
-  archiveName.gsub!(/(\d{2}):(\d{2}):(\d{2})/,'\1\2\3')
-  ARCHIVEFILE = File.join(OUTDIR,"#{MODINFONAME}#{archiveName}.7z")
+  ARCHIVEFILE = File.join(OUTDIR,"#{MODINFONAME}-#{archiveName}.7z")
+  ARCHIVEFILE.gsub!(/\s+/,'')
   if OPTIONS[:force]
     FileUtils.rm(ARCHIVEFILE) if File.exist?(ARCHIVEFILE)
   elsif File.exist?(ARCHIVEFILE)
-    abort "build already made (#{File.basename(ARCHIVEFILE)})"
+    abort "error: build already made (#{ARCHIVEFILE})"
   end
 end
 

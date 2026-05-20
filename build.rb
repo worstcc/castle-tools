@@ -11,8 +11,7 @@ require 'securerandom'
 require 'seven_zip_ruby'
 require 'tmpdir'
 
-# TODO: when not creating archive, a directory should be created with the mod name instead of just "data"
-# TODO: add support for changelog & readme files
+# TODO: speedup: only sync unsynced files, add directory input to convertAudio script
 
 usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [source directory] [output directory]"
 options = {}
@@ -93,31 +92,14 @@ SWFDIR = File.join(SRCDIR,'swf')
 # abort if no source directories found or only src directory exists
 abort 'error: source directory does not contain the expected directories' if (!Dir.exist?(AUDIODIR) && !Dir.exist?(FONTSDIR) && !Dir.exist?(SWFSRCDIR) && !Dir.exist?(SWFDIR)) || (Dir.exist?(SWFSRCDIR) && !Dir.exist?(AUDIODIR) && !Dir.exist?(FONTSDIR) && !Dir.exist?(SWFDIR))
 
-# get data directory
-unless OPTIONS[:sync]
-  if OPTIONS[:archive]
-    DATAPARENTDIR = Dir.mktmpdir
-    DATADIR = File.join(DATAPARENTDIR,'data')
-    at_exit { FileUtils.rm_rf(DATAPARENTDIR) }
-  else
-    DATADIR = File.join(OUTDIR,'data')
-    if OPTIONS[:force]
-      FileUtils.rm_rf(DATADIR)
-    elsif Dir.exist?(DATADIR)
-      abort '\'data\' already exists in output directory'
-    end
-  end
-  Dir.mkdir(DATADIR)
-end
-
 buildFile = File.join(SRCDIR,'build.json')
 buildJson = nil
 buildJson = JSON.parse(File.read(buildFile)) if File.exist?(buildFile)
 
+# set SWFFILES & get hash of repository files for build differentiation & random seed
 if Dir.exist?(SWFDIR)
   SWFFILES = Dir.glob(File.join(SWFDIR,'*.swf'))
 
-  # get hash of repository files for build differentiation & random seed
   hashFiles = []
   hashFiles << Dir.glob(File.join(SWFDIR,'*.swf')).sort.map { |file| File.read(file) }.join
   hashFiles << Dir.glob(File.join(AUDIODIR,'*.{mp3,flac,ogg,aac,m4a,wav,opus}')).sort.map { |file| File.read(file) }.join if Dir.exist?(AUDIODIR)
@@ -146,27 +128,45 @@ unless OPTIONS[:sync]
       MODINFOVERSION = '1.0'.freeze
       warn 'version not specified, using \'1.0\' as the version'
     end
+    MODINFOSTRING = "#{MODINFONAME} #{MODINFOVERSION}".freeze
   else
-    MODINFOVERSION = GITCURRENTCOMMIT ? "b#{GITCURRENTCOMMIT}-#{FILEHASH[0...8]}".freeze : FILEHASH[0...8].freeze
+    MODINFOVERSION = GITCURRENTCOMMIT ? "b#{GITCURRENTCOMMIT}_#{FILEHASH[0...8]}".freeze : FILEHASH[0...8].freeze
+    buildNum,buildHash = MODINFOVERSION.split('_',2)
+    MODINFOSTRING = buildHash ? "#{MODINFONAME} #{buildNum} (#{buildHash})".freeze : "#{MODINFONAME} (#{MODINFOVERSION})".freeze
   end
-  puts "building \"#{MODINFONAME} #{MODINFOVERSION}\""
+
+  puts "building \"#{MODINFOSTRING}\""
+
   # get vanilla bsp/dev only whitelists
   VANILLABSPS = (buildJson && buildJson['vanillaBsps']) || []
   DEVONLYFILES = (buildJson && buildJson['devOnlyFiles']) || []
-end
 
-# get archive file name
-if OPTIONS[:archive]
-  archiveName = MODINFOVERSION.dup
-  archiveName.gsub!(/\s+/,'')
-  archiveName.gsub!('.','_')
-  ARCHIVEFILE = File.join(OUTDIR,"#{MODINFONAME}-#{archiveName}.7z")
-  ARCHIVEFILE.gsub!(/\s+/,'')
+  OUTPUTVERSION = "#{MODINFONAME}_#{MODINFOVERSION}".gsub(/\s+/,'')
+  BUILDFILE = options[:archive] ? File.join(OUTDIR,"#{OUTPUTVERSION}.7z") : File.join(OUTDIR,OUTPUTVERSION.to_s)
   if OPTIONS[:force]
-    FileUtils.rm(ARCHIVEFILE) if File.exist?(ARCHIVEFILE)
-  elsif File.exist?(ARCHIVEFILE)
-    abort "error: build already made (#{ARCHIVEFILE})"
+    FileUtils.rm_rf(BUILDFILE) if File.exist?(BUILDFILE)
+  elsif File.exist?(BUILDFILE)
+    abort "error: build already made (#{BUILDFILE})"
   end
+
+  # create output directories
+  if OPTIONS[:archive]
+    ARCHIVEDIR = Dir.mktmpdir
+    DATADIR = File.join(ARCHIVEDIR,OUTPUTVERSION.to_s,'data')
+    at_exit { FileUtils.rm_rf(ARCHIVEDIR) }
+  else
+    DATADIR = File.join(OUTDIR,OUTPUTVERSION.to_s,'data')
+    if OPTIONS[:force]
+      FileUtils.rm_rf(DATADIR)
+    elsif Dir.exist?(DATADIR)
+      abort '\'data\' already exists in output directory'
+    end
+  end
+  FileUtils.mkdir_p(DATADIR)
+
+  # add changelog/readme files
+  FileUtils.cp(File.join(SRCDIR,'buildChangelog.txt'),File.join(File.dirname(DATADIR),'changelog.txt')) if File.exist?(File.join(SRCDIR,'buildChangelog.txt'))
+  FileUtils.cp(File.join(SRCDIR,'buildReadme.txt'),File.join(File.dirname(DATADIR),'readme.txt')) if File.exist?(File.join(SRCDIR,'buildReadme.txt'))
 end
 
 BLANKBSP = buildJson && buildJson['blankBsp'] == true
@@ -335,7 +335,7 @@ def processSwfs!
 
           if line.strip.include?('// BUILD: MOD INFO')
             if nextLine =~ /".*\$MODINFO.*"/
-              lines[i + 1] = nextLine.gsub('$MODINFO',"#{MODINFONAME} #{MODINFOVERSION}")
+              lines[i + 1] = nextLine.gsub('$MODINFO',MODINFOSTRING)
               modInfoCount += 1
             end
           elsif line.strip.include?('// BUILD: RANDOM')
@@ -442,12 +442,12 @@ def archive!
     puts 'creating archive...'
   end
 
-  Dir.chdir(DATAPARENTDIR) do
-    File.open(ARCHIVEFILE,'wb') do |file|
+  Dir.chdir(ARCHIVEDIR) do
+    File.open(BUILDFILE,'wb') do |file|
       SevenZipRuby::Writer.open(file,password: password) do |szr|
         szr.method = 'LZMA2'
         szr.level = 9
-        szr.add_directory(File.basename(DATADIR))
+        szr.add_directory(OUTPUTVERSION)
       end
     end
   end
@@ -461,9 +461,5 @@ else
   processSwfs!
   processAudio!
   archive!
-  if OPTIONS[:archive]
-    puts "done (#{ARCHIVEFILE})"
-  else
-    puts "done (#{DATADIR})"
-  end
+  puts "done (#{BUILDFILE})"
 end

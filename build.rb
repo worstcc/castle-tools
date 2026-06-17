@@ -423,7 +423,7 @@ def processAudio!
 
   Parallel.each(audioFiles,in_threads: Etc.nprocessors) do |audioFile|
     filename = File.basename(audioFile)
-    if filename =~ /sound/i
+    if filename =~ /sound|sfx/i
       system(RbConfig.ruby,CONVERTAUDIORB,audioFile,soundsDir)
     else
       system(RbConfig.ruby,CONVERTAUDIORB,audioFile,musicDir)

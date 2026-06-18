@@ -466,7 +466,12 @@ end
 spriteIdToTag = buildPrimaryTagMap(sortedTags,'DefineSpriteTag','spriteId')
 fontIdToTag = buildPrimaryTagMap(sortedTags,'DefineFont2Tag','fontID')
 tagsToRemove = Set.new
-exportAssetsByTarget = processSecondaryTags(sortedTags,'ExportAssetsTag',spriteIdToTag,nil,tagsToRemove)
+allTagIds = {}
+sortedTags.each do |tag|
+  id = getTagID(tag)
+  allTagIds[id] = tag if id
+end
+exportAssetsByTarget = processSecondaryTags(sortedTags,'ExportAssetsTag',allTagIds,nil,tagsToRemove)
 fontNameByTarget = processSecondaryTags(sortedTags,'DefineFontNameTag',fontIdToTag,'fontId',tagsToRemove)
 sortedTags.reject! { |tag| tagsToRemove.include?(tag) }
 exportAssetsByTarget.each do |id,tag|
@@ -527,10 +532,7 @@ tags.each do |tag|
 end
 
 exportAssetsByTarget.each do |id,tag|
-  spriteTag = spriteIdToTag[id]
-  next unless spriteTag
-
-  updateTagId(tag,idMapping[id])
+  updateTagId(tag,idMapping[id]) if idMapping[id]
 end
 
 fontNameByTarget.each do |id,tag|

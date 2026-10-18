@@ -117,6 +117,9 @@ def updateTagId(tag,id)
 end
 
 def getTagDependencies(tag,allTags,idToTag,visited = Set.new)
+  cached = $tagDepCache[tag.object_id]
+  return cached if cached
+
   # prevent infinite recursion
   return [] if visited.include?(tag)
 
@@ -178,19 +181,27 @@ def getTagDependencies(tag,allTags,idToTag,visited = Set.new)
     end
   end
   deps.uniq
+  $tagDepCache[tag.object_id] = deps
 end
 
 def topologicalSort(frame,allTags,idToTag)
   graph = Hash.new { |h,k| h[k] = [] }
+  frameSet = frame.to_set
   frame.each do |tag|
-    graph[tag] = getTagDependencies(tag,allTags,idToTag).select { |dep| frame.include?(dep) }
+    graph[tag] = getTagDependencies(tag,allTags,idToTag).select { |dep| frameSet.include?(dep) }
   end
 
   depthCache = {}
+  computing = Set.new
   depth = lambda do |tag|
+    return 0 if computing.include?(tag)
+
     depthCache[tag] ||= begin
-      dependencies = graph[tag]
-      dependencies.map { |dependency| depth.call(dependency) }.max.to_i + 1
+      computing.add(tag)
+      deps = graph[tag]
+      result = deps.map { |d| depth.call(d) }.max.to_i + 1
+      computing.delete(tag)
+      result
     end
   end
 
@@ -234,7 +245,7 @@ def dfs(tag,graph,visited,result,frame)
 
   visited.add(tag)
   graph[tag].each do |dep|
-    dfs(dep,graph,visited,result,frame) if frame.include?(dep)
+    dfs(dep,graph,visited,result,frame)
   end
   result << tag
 end
@@ -336,6 +347,7 @@ tagsNode = DOC.at_xpath('//tags')
 tags = tagsNode.xpath('item').to_a
 
 fixMalformedPixlTags(tags)
+$tagDepCache = {}
 
 # sprites: set hasEndTag to true & remove "SoundStreamHead2" tags
 tags.reject! { |tag| tag['type'] == 'SoundStreamHead2Tag' }

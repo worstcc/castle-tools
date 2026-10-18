@@ -33,8 +33,9 @@ OptionParser.new do |opts|
   opts.separator ''
   opts.on('-a','--archive','compress archive using 7zip') { options[:archive] = true }
   opts.on('-l','--protect','when using --archive, password protect the archive') { options[:protect] = true }
-  opts.on('-nNAME','--modName NAME',String,'mod name to use for archive/$MODINFO') { |name| options[:modName] = name }
-  opts.on('-vNAME','--modVersion NAME',String,'version to use for archive/$MODINFO') { |name| options[:modVersion] = name }
+  opts.on('-nNAME','--modName NAME',String,'mod name to use for archive/$MODINFO') { |str| options[:modName] = str }
+  opts.on('-vNAME','--modVersion NAME',String,'version to use for archive/$MODINFO') { |str| options[:modVersion] = str }
+  opts.on('-tTESTER','--tester','tester name to use for $MODTESTER') { |str| options[:modTester] = str }
   opts.on('-p','--public','omit code in dev blocks, use version number over date for mod info') { options[:public] = true }
   opts.on('-f','--force','make build if data directory/archive already exists') { options[:force] = true }
   opts.on('-s','--sync','only sync swfs') { options[:sync] = true }
@@ -314,6 +315,7 @@ def processSwfs!
     originalMetadata = nil
     devBlocks = 0
     modInfoCount = 0
+    modTesterCount = 0
     randomCount = 0
     unless OPTIONS[:sync]
       # perform script substitutions
@@ -338,6 +340,11 @@ def processSwfs!
               lines[i + 1] = nextLine.gsub('$MODINFO',MODINFOSTRING)
               modInfoCount += 1
             end
+          elsif OPTIONS[:modTester] && line.strip.include?('// BUILD: MOD TESTER')
+            if nextLine =~ /".*\$MODTESTER.*"/
+              lines[i + 1] = nextLine.gsub('$MODTESTER',OPTIONS[:modTester])
+              modTesterCount += 1
+            end
           elsif line.strip.include?('// BUILD: RANDOM')
             if nextLine =~ /"s*\$RANDOM\((\d+)\)\s*"/
               randomVal = Regexp.last_match(1).to_i
@@ -351,7 +358,7 @@ def processSwfs!
           end
         end
 
-        modified = lines.join("\n") if modInfoCount.positive? || randomCount.positive?
+        modified = lines.join("\n") if modInfoCount.positive? || modTesterCount.positive? || randomCount.positive?
 
         next unless modified != original
 
@@ -366,6 +373,7 @@ def processSwfs!
     if system(RbConfig.ruby,SYNCSCRIPTSRB,swfFile,scriptsDir,out: File::NULL,err: File::NULL)
       puts "(swf) removed #{devBlocks} dev code block(s) from #{swfName}" if devBlocks.positive?
       puts "(swf) substituted #{modInfoCount} mod info string(s) in #{swfName}" if modInfoCount.positive?
+      puts "(swf) substituted #{modTesterCount} mod tester string(s) in #{swfName}" if modTesterCount.positive?
       puts "(swf) substituted #{randomCount} random value(s) in #{swfName}" if randomCount.positive?
     else
       warn "(swf) scripts in #{swfName} failed to import"

@@ -27,7 +27,7 @@ else
   isSwf = inputFile.downcase.end_with?('.swf')
   isTxt = inputFile.downcase.end_with?('.txt')
   abort "error: '#{File.basename(inputFile)}' is not a swf or txt file" unless isTxt || isSwf
-  bspSwf = File.join(__dir__,'swf','bsp.swf')
+  bspSwf = File.join(__dir__,'bsp','bsp.swf')
   abort 'error: bsp/bsp.swf missing in script directory' unless File.exist?(bspSwf)
 
   ruffle = nil

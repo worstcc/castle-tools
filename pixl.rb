@@ -11,7 +11,7 @@ require 'tmpdir'
 # TODO: xbla/ps3 import (big endian "PIXL")
 
 options = {}
-OptionParser.new do |opts|
+parser = OptionParser.new do |opts|
   opts.banner = "usage: #{File.basename($PROGRAM_NAME)} [image|swf] [output directory]"
   opts.on('-p','--platform PLATFORM',String,'game platform to target (steam (default),xbla,ps3)') do |format|
     abort 'error: invalid format' unless format.match?(/steam|xbla|ps3/)
@@ -30,11 +30,12 @@ OptionParser.new do |opts|
   opts.on('-f','--noSizeLimit','import: allow image size larger than 512 (not recommended, will cause issues)') { options[:force] = true }
   opts.on('-r','--raw','export: use raw image dimensions instead of placed dimensions') { options[:exportRaw] = true }
   opts.on('-x','--printData','import: print unknownData of pixl tag instead of outputting to swf') { options[:xml] = true }
-end.parse!
+end
+parser.parse!
 options[:format] = 'steam' unless options[:format]
 options[:size] = 512 unless options[:size]
 
-abort "usage: #{File.basename($PROGRAM_NAME)} [image|swf] [output directory]" if ARGV.length != 2
+abort parser.help if ARGV.length != 2
 
 inputFile = File.expand_path(ARGV[0])
 abort "error: #{File.basename(inputFile)} not found" unless File.exist?(inputFile)
@@ -182,7 +183,7 @@ else
     # swf header
 
     # character id
-    data << [65534].pack('v').unpack1('H*')
+    data << [1].pack('v').unpack1('H*')
     data << '00' * 2
     # rectangle bounds (xMin,xMax,yMin,yMax)
     data << [(-placedWidth * 10).round].pack('l<').unpack1('H*')
@@ -223,7 +224,7 @@ else
     data << [image.height].pack('V').unpack1('H*')
     data << 'cd' * 4
     # character id
-    data << [65534].pack('v').unpack1('H*')
+    data << [1].pack('v').unpack1('H*')
     data << '00' * 14
 
     # image data
@@ -284,108 +285,10 @@ else
   end
   FileUtils.cp(pixlSwf,tempSwf)
 
-  # convert image to png for ffdec import
-  Tempfile.create(['','.png']) do |file|
-    MiniMagick.convert do |cmd|
-      cmd << "#{image.path}[0]"
-      cmd << file.path
-    end
-    abort 'error: ffdec failed' unless system(ffdec,'-replace',tempSwf.path,tempSwf.path,'65531',file.path)
-  end
-
-  # get XML for editing shape & pixl tags
   abort 'error: ffdec failed' unless system(ffdec,'-swf2xml',tempSwf.path,tempXml.path)
   doc = Nokogiri::XML(File.read(tempXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
-
-  tags = doc.at_xpath('//tags')
-  # make shape place image, centered & scaled to placed dimensions
-  shape = tags.at_xpath("//item[@type='DefineShapeTag']")
-  shapeBounds = shape.at_xpath('//shapeBounds')
-  shapeBounds['Xmin'] = (placedWidth * -10).to_i
-  shapeBounds['Xmax'] = (placedWidth * 10).to_i
-  shapeBounds['Ymin'] = (placedHeight * -10).to_i
-  shapeBounds['Ymax'] = (placedHeight * 10).to_i
-  bitmapMatrix = shape.at_xpath('//shapes/fillStyles/fillStyles/item[last()]/bitmapMatrix')
-  bitmapMatrix['translateX'] = (placedWidth * -10).to_i
-  bitmapMatrix['translateY'] = (placedHeight * -10).to_i
-  bitmapMatrix['scaleX'] = (placedWidth.to_f / image.width) * 20
-  bitmapMatrix['scaleY'] = (placedHeight.to_f / image.height) * 20
-  styleChangeRecord = shape.at_xpath("//shapes/shapeRecords/item[@type='StyleChangeRecord']")
-  styleChangeRecord['moveDeltaX'] = (placedWidth * -10).to_i
-  styleChangeRecord['moveDeltaY'] = (placedHeight * -10).to_i
-
-  # split straight edge records to avoid exceeding max edge length
-  def splitEdge(delta)
-    return [delta] if delta.abs <= 32767
-
-    numSegments = (delta.abs.to_f / 32767).ceil
-    segmentSize = (delta.abs.to_f / numSegments).round
-    sign = delta <=> 0
-
-    segments = Array.new(numSegments - 1,sign * segmentSize)
-    remainder = delta.abs - segmentSize * (numSegments - 1)
-    segments << sign * remainder
-    segments
-  end
-
-  straightEdgeRecords = shape.xpath("//shapes/shapeRecords/item[@type='StraightEdgeRecord']")
-  segments = [
-    splitEdge((placedWidth * 20).to_i), # right
-    splitEdge((placedHeight * 20).to_i), # down
-    splitEdge((placedWidth * -20).to_i), # left
-    splitEdge((placedHeight * -20).to_i) # up
-  ]
-  shapeRecords = shape.at_xpath('//shapes/shapeRecords')
-  segments.each_with_index do |directionSegments,edgeIndex|
-    straightEdgeRecords[edgeIndex]['deltaX'] = directionSegments[0] if edgeIndex.even?
-    straightEdgeRecords[edgeIndex]['deltaY'] = directionSegments[0] if edgeIndex.odd?
-    straightEdgeRecords[edgeIndex]['numBits'] = Math.log2(directionSegments[0].abs + 1).ceil + 1
-    directionSegments[1..].each do |segment|
-      newRecord = Nokogiri::XML::Element.new('item',shapeRecords.document)
-      newRecord['type'] = 'StraightEdgeRecord'
-      newRecord['generalLineFlag'] = segment >= 0 ? 'false' : 'true'
-      newRecord['numBits'] = Math.log2(segment.abs + 1).ceil + 1
-      newRecord['vertLineFlag'] = edgeIndex.odd? ? 'true' : 'false'
-      if edgeIndex.even?
-        newRecord['deltaX'] = segment
-        newRecord['deltaY'] = 0
-      else
-        newRecord['deltaX'] = 0
-        newRecord['deltaY'] = segment
-      end
-      straightEdgeRecords[edgeIndex].add_next_sibling(newRecord)
-    end
-  end
-
-  tags.at_xpath("//item[@type='UnknownTag']")['unknownData'] = imageToPixl(image,placedWidth,placedHeight)
-
-  # apply offset to pixl sprite if specified
-  if options[:placedOffset]
-    xOffset,yOffset = options[:placedOffset].split(',').map(&:to_f)
-
-    sprite = tags.at_xpath("//item[@type='DefineSpriteTag'][@spriteId='65535']")
-    return unless sprite
-
-    placeObjectNodes = sprite.xpath(".//item[@type='PlaceObject2Tag']")
-    placeObjectNodes.each do |node|
-      node['placeFlagHasMatrix'] = 'true'
-      # create matrix
-      matrix = node.at_xpath('./matrix') || Nokogiri::XML::Element.new('matrix',doc)
-      matrix['type'] = 'MATRIX'
-      matrix['hasScale'] = true
-      matrix['scaleX'] = 1.0
-      matrix['scaleY'] = 1.0
-      matrix['hasRotate'] = true
-      matrix['rotateSkew0'] = 0.0
-      matrix['rotateSkew1'] = 0.0
-      matrix['translateX'] = (xOffset * 20).to_i
-      matrix['translateY'] = (yOffset * 20).to_i
-      node.add_child(matrix) unless node.at_xpath('matrix')
-    end
-  end
-
+  doc.at_xpath("//tags//item[@type='UnknownTag']")['unknownData'] = imageToPixl(image,placedWidth,placedHeight)
   File.write(tempXml,doc.to_xml(indent:2,indent_text:'  ').gsub(%r{</item><item},"</item>\n  <item"))
-
   if options[:xml]
     FileUtils.cp(tempXml,File.join(outputDir,"#{File.basename(inputFile,'.*')}.xml"))
   else

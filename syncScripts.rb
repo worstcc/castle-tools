@@ -194,9 +194,6 @@ OptionParser.new do |opts|
 end.parse!
 abort usage if ARGV.length != 2
 
-DEOBFUSCATESWF = File.join(__dir__,'deobfuscateSwf.rb')
-abort 'error: deobfuscateSwf.rb not found in source directory' unless File.exist?(DEOBFUSCATESWF)
-
 swf = File.expand_path(ARGV[0])
 abort "error: input '#{File.basename(swf)}' not found" unless File.exist?(swf)
 dir = File.expand_path(ARGV[1])
@@ -241,10 +238,7 @@ end
 abort 'error: jpexs is not installed' if ffdec.nil? || !File.exist?(ffdec)
 
 # initial export
-unless Dir.exist?(dir)
-  abort 'error: deobfuscating swf failed' unless system(RbConfig.ruby,DEOBFUSCATESWF,swf.to_s)
-  system(ffdec,'-swfProfile','castle_crashers','-timeout','9999','-exportTimeout','9999','-export','script',dir.to_s,swf.to_s,out: File::NULL,err: File::NULL)
-end
+system(ffdec,'-swfProfile','castle_crashers','-timeout','9999','-exportTimeout','9999','-export','script',dir.to_s,swf.to_s,out: File::NULL,err: File::NULL) unless Dir.exist?(dir)
 
 # sync
 unless options[:skipStructure]

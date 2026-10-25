@@ -5,79 +5,6 @@ require 'optparse'
 require 'tempfile'
 require 'tmpdir'
 
-def fixMalformedPixlTags(tags)
-  # on each copy/move, JPEXS adds 6 bytes at the start & removes 6 bytes at the end
-  # tag can be recovered 2 copies deep, 2+ then image data is lost
-  # identify tag header through two pairs of "ffff" that are always the same distance relatively
-  i = 0
-  tags.reject! do |tag|
-    i += 1
-    next unless tag['unknownData']
-
-    data = tag['unknownData']
-    next unless data.index('4c584950')
-
-    footer = data[-32..]
-    next if footer.end_with?('24000000280000003000000003000000')
-
-    if footer.end_with?('24000000280000003000')
-      data = data[12..]
-      data << '000003000000'
-      tag['unknownData'] = data
-      next
-    elsif footer.end_with?('24000000')
-      data = data[24..]
-      data << '280000003000000003000000'
-      tag['unknownData'] = data
-      next
-    else
-      puts "warning: unrecoverable pixl tag, removing (pixl ##{i})"
-      true
-    end
-  end
-end
-
-def padPixlTags
-  swfData = File.binread(SWF)
-  swfByteDiff = 0
-  found = false
-  DOC.xpath('//tags/*').each do |tag|
-    next unless tag['unknownData']
-
-    data = tag['unknownData']
-    lxipIndex = data.index('4c584950')
-    next unless lxipIndex
-
-    # adjust padding
-    segment = data[0..lxipIndex + 7]
-    binSegment = [segment].pack('H*')
-    offset = swfData.index(binSegment) + swfByteDiff
-    next unless offset
-
-    lxipOffset = offset + (lxipIndex / 2)
-    # 32 bytes instead of 16?
-    next unless lxipOffset % 32 != 0
-
-    found = true
-    bytesToDelete = (lxipIndex / 2) - 20
-    newLXIPOffset = offset + 20
-    paddingLength = ((32 - newLXIPOffset % 32) % 32)
-    # byte difference
-    byteDifference = paddingLength - bytesToDelete
-    unless byteDifference.zero?
-      id = [data[0,8]].pack('H*').unpack1('V').to_s
-      puts "pixl (id=#{id}): #{byteDifference.positive? ? '+' : ''}#{byteDifference} bytes"
-    end
-    swfByteDiff += (bytesToDelete * -1) + paddingLength
-    paddingHex = 'CD' * paddingLength
-    tag['unknownData'] = data[0...40] + paddingHex + data[lxipIndex..]
-  end
-  return unless found || OPTIONS[:dryrun]
-
-  File.write(SWFXML.path,DOC.to_xml(indent:2,indent_text:'  ').gsub(%r{</item><item},"</item>\n  <item"))
-  system(FFDEC,'-xml2swf',SWFXML.path,SWF)
-end
-
 def getTagID(tag)
   return tag['shapeId'] if tag['shapeId']
   return tag['spriteId'] if tag['spriteId']
@@ -300,10 +227,9 @@ def insertSecondaryTag(sortedTags,primaryTag,secondaryTag)
   sortedTags.insert(primaryIndex + 1 > secondaryIndex ? primaryIndex : primaryIndex + 1,secondaryTag)
 end
 
-usage = "usage: #{File.basename($PROGRAM_NAME)} [options] [swf]"
 options = {}
-OptionParser.new do |opts|
-  opts.banner = usage
+parser = OptionParser.new do |opts|
+  opts.banner = "usage: #{File.basename($PROGRAM_NAME)} [options] [swf]"
   opts.on('-n','--no-backup','don\'t create a backup of swf') { options[:nobackup] = true }
   opts.on('-i','--start-id ID',Integer,'ID to start from when reordering (default: 1)') do |id|
     raise 'invalid ID (allowed range: 1-65535)' if id > 65535 || id < 1
@@ -312,9 +238,10 @@ OptionParser.new do |opts|
   end
   opts.on('-c','--clean','remove unused tags from swf instead of moving them') { options[:clean] = true }
   opts.on('-d','--dry-run','don\'t modify the swf') { options[:dryrun] = true }
-end.parse!
+end
+parser.parse!
 
-abort usage if ARGV.length != 1
+abort parser.help if ARGV.length != 1
 
 options[:id] = 1 unless options[:id]
 OPTIONS = options
@@ -346,7 +273,6 @@ DOC = Nokogiri::XML(File.read(SWFXML.path),nil,nil,Nokogiri::XML::ParseOptions::
 tagsNode = DOC.at_xpath('//tags')
 tags = tagsNode.xpath('item').to_a
 
-fixMalformedPixlTags(tags)
 $tagDepCache = {}
 
 # sprites: set hasEndTag to true & remove "SoundStreamHead2" tags
@@ -568,5 +494,3 @@ unless OPTIONS[:dryrun]
   File.write(SWFXML,DOC.to_xml(indent:2,indent_text:'  ').gsub(%r{</item><item},"</item>\n  <item"))
   system(FFDEC,'-xml2swf',SWFXML.path,SWF)
 end
-
-padPixlTags

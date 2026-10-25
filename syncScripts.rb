@@ -243,13 +243,13 @@ abort 'error: jpexs is not installed' if ffdec.nil? || !File.exist?(ffdec)
 # initial export
 unless Dir.exist?(dir)
   abort 'error: deobfuscating swf failed' unless system(RbConfig.ruby,DEOBFUSCATESWF,swf.to_s)
-  system(ffdec,'-timeout','9999','-exportTimeout','9999','-export','script',dir.to_s,swf.to_s,out: File::NULL,err: File::NULL)
+  system(ffdec,'-swfProfile','castle_crashers','-timeout','9999','-exportTimeout','9999','-export','script',dir.to_s,swf.to_s,out: File::NULL,err: File::NULL)
 end
 
 # sync
 unless options[:skipStructure]
   tempDir = Dir.mktmpdir
-  system(ffdec,'-timeout','9999','-exportTimeout','9999','-export','script',tempDir.to_s,swf.to_s,out: File::NULL,err: File::NULL)
+  system(ffdec,'-swfProfile','castle_crashers','-timeout','9999','-exportTimeout','9999','-export','script',tempDir.to_s,swf.to_s,out: File::NULL,err: File::NULL)
 
   currentScripts = collectScripts(File.join(dir,'scripts'))
   tempScripts = collectScripts(File.join(tempDir,'scripts'))
@@ -343,7 +343,7 @@ unless options[:skipStructure]
   FileUtils.mv(tempDir,dir)
 end
 
-abort 'error: scripts failed to import due to syntax error(s)' unless system(ffdec,'-importScript',swf.to_s,swf.to_s,File.join(dir,'scripts'))
+abort 'error: scripts failed to import due to syntax error(s)' unless system(ffdec,'-swfProfile','castle_crashers','-importScript',swf.to_s,swf.to_s,File.join(dir,'scripts'))
 
 newSwfHash = Digest::SHA256.file(swf).hexdigest
 scriptHash = hashScripts(dir)

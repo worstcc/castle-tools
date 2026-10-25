@@ -2,7 +2,7 @@
 
 ## Dependencies:
 - Ruby
-- JPEXS (commandline operations)
+- JPEXS (v26.4.0 or newer)
 - ImageMagick (pixl tag creation)
 - Ruffle (bsp creation)
 - ffmpeg (audio conversion)
@@ -41,7 +41,9 @@ bundle install
 - Opens a bsp viewer with detailed information
 
 ### fixSwfTags.rb
-- Renumbers & reorders tags, fixes pixl (unknown) tags from crashing the game, set hasEndTag to true for all sprites in a swf file
+- Sorts tag list in a swf
+- Sets `hasEndTag` to true for sprites
+- Can remove unused tags
 
 ### pixl.rb
 - Imports images to swf as pixl tags
@@ -110,7 +112,7 @@ compile.rb --brec [input directory] [game data directory]
 deobfuscateSwf.rb [swf file]
 ```
 
-### Reorder tag IDs, fix pixl tag/hasEndTag crashes in a swf file
+### Sort tag list in a swf file
 ```
 fixSwfTags.rb [swf file]
 ```

@@ -271,28 +271,33 @@ else
 
   # import image
 
-  pixlSwf = File.join(__dir__,'swf','pixl.swf')
-  abort 'swf/pixl.swf missing in script directory' unless File.exist?(pixlSwf)
+  PIXLXML = <<~XML.freeze
+    <?xml version="1.0" encoding="UTF-8"?><!--
+      WARNING: The structure of this XML is not final.
+      In later versions of FFDec it can be changed.
+      Make sure you use compatible reader/writer based on _xmlExportMajor/_xmlExportMinor keys.
+      --><swf _xmlExportMajor="4" _xmlExportMinor="2" _generator="JPEXS Free Flash Decompiler v.26.4.0 nightly build 3599" type="SWF" charset="UTF-8" compression="NONE" encrypted="false" frameCount="1" frameRate="30.0" gfx="false" hasEndTag="true" version="6">
+      <displayRect type="RECT" Xmax="16960" Xmin="0" Ymax="9600" Ymin="0" nbits="16"/>
+      <tags>
+        <item type="SetBackgroundColorTag" forceWriteAsLong="false">
+          <backgroundColor type="RGB" blue="255" green="255" red="255"/>
+        </item>
+        <item type="UnknownTag" tagId="148" forceWriteAsLong="true" unknownData=""/>
+        <item type="ShowFrameTag" forceWriteAsLong="false"/>
+      </tags>
+    </swf>
+  XML
+  doc = Nokogiri::XML(PIXLXML,nil,nil,Nokogiri::XML::ParseOptions::HUGE)
+  doc.at_xpath("//tags//item[@type='UnknownTag']")['unknownData'] = imageToPixl(image,placedWidth,placedHeight)
   tempXml = Tempfile.create(['','.xml'])
   at_exit do
     tempXml.close
     File.unlink(tempXml)
   end
-  tempSwf = Tempfile.create(['','.swf'])
-  at_exit do
-    tempSwf.close
-    File.unlink(tempSwf)
-  end
-  FileUtils.cp(pixlSwf,tempSwf)
-
-  abort 'error: ffdec failed' unless system(ffdec,'-swf2xml',tempSwf.path,tempXml.path)
-  doc = Nokogiri::XML(File.read(tempXml.path),nil,nil,Nokogiri::XML::ParseOptions::HUGE)
-  doc.at_xpath("//tags//item[@type='UnknownTag']")['unknownData'] = imageToPixl(image,placedWidth,placedHeight)
   File.write(tempXml,doc.to_xml(indent:2,indent_text:'  ').gsub(%r{</item><item},"</item>\n  <item"))
   if options[:xml]
     FileUtils.cp(tempXml,File.join(outputDir,"#{File.basename(inputFile,'.*')}.xml"))
   else
-    abort 'error: ffdec failed' unless system(ffdec,'-xml2swf',tempXml.path,tempSwf.path)
-    FileUtils.cp(tempSwf,File.join(outputDir,"#{File.basename(inputFile,'.*')}.swf"))
+    abort 'error: ffdec failed' unless system(ffdec,'-xml2swf',tempXml.path,File.join(outputDir,"#{File.basename(inputFile,'.*')}.swf"))
   end
 end

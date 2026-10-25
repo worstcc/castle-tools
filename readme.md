@@ -29,9 +29,6 @@ bundle install
 - Fixes swf file length when decrypting (fixes missing frames/assets in JPEXS)
 - Based on original nrec decryption/encryption script by ethteck (https://github.com/ethteck/castlecrashers)
 
-### deobfuscateSwf.rb
-- Deobfuscates all ActionScript 2.0 code in a swf file (fixes §§ instructions & unknown 70s)
-
 ### compile.rb
 - Encrypts all swf files in an input directory then moves the created pak files to a output (game) directory
 - Useful for quickly applying changes made to swf files into the game
@@ -105,11 +102,6 @@ compile.rb [input directory] [game data directory]
 ### Encrypt swf files in a directory then move the pak files to a game data directory (brec)
 ```
 compile.rb --brec [input directory] [game data directory]
-```
-
-### Deobfuscate AS2 in a swf file
-```
-deobfuscateSwf.rb [swf file]
 ```
 
 ### Sort tag list in a swf file
